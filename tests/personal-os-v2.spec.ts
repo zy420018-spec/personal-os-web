@@ -8,17 +8,39 @@ const storageKey = "personal-os-data-v1";
 const readData = (page: import("@playwright/test").Page) =>
   page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), storageKey);
 
-test("migrates V1 data without clearing it", async ({ page }) => {
+test("migrates V2 data to V3 without clearing it", async ({ page }) => {
   await page.goto("/#/dashboard");
   const current = await readData(page);
-  const { courses: _courses, courseChanges: _changes, ...legacy } = current;
+  const { courses, ...legacy } = current;
+  const legacyCourses = courses.map(
+    (course: Record<string, unknown>) => {
+      const {
+        availableMinutes: _minutes,
+        arrangementMode: _mode,
+        allowedTaskFocus: _focus,
+        avoidStartEnd: _avoid,
+        availableWindows: _windows,
+        ...rest
+      } = course;
+      return rest;
+    },
+  );
   const migrated = {
     ...legacy,
-    version: 1,
+    version: 2,
+    courses: legacyCourses,
     tasks: legacy.tasks.map(
       (task: Record<string, unknown>) => {
-        const { completedAt: _completed, remainingWork: _remaining, ...rest } =
-          task;
+        const {
+          completedAt: _completed,
+          remainingWork: _remaining,
+          minDuration: _minDuration,
+          allowSplit: _allowSplit,
+          focusRequirement: _focusRequirement,
+          planningScenes: _planningScenes,
+          prerequisiteTaskId: _prerequisite,
+          ...rest
+        } = task;
         return rest;
       },
     ),
@@ -30,10 +52,16 @@ test("migrates V1 data without clearing it", async ({ page }) => {
   await page.reload();
   const data = await readData(page);
   const keys = await page.evaluate(() => Object.keys(localStorage));
-  expect(data.version).toBe(2);
+  expect(data.version).toBe(3);
   expect(data.tasks.length).toBeGreaterThan(0);
   expect(data.tasks[0].remainingWork).toBe("");
-  expect(Array.isArray(data.courses)).toBe(true);
+  expect(data.tasks[0].minDuration).toBeGreaterThan(0);
+  expect(data.tasks[0].allowSplit).toBeDefined();
+  expect(data.tasks[0].focusRequirement).toBe("normal");
+  expect(data.tasks[0].planningScenes.length).toBeGreaterThan(0);
+  expect(data.courses.length).toBe(courses.length);
+  expect(data.courses[0].availableMinutes).toBe(0);
+  expect(data.courses[0].arrangementMode).toBe("manual");
   expect(keys.some((key) => key.startsWith(`${storageKey}-backup-`))).toBe(
     true,
   );
@@ -150,6 +178,53 @@ test("keeps fixed courses when adding temporary changes and confirms real schedu
     const after = await readData(page);
     expect(after.schedules.length).toBeGreaterThanOrEqual(before.schedules.length);
   }
+});
+
+test("persists water-class and task timing settings from existing editors", async ({
+  page,
+}) => {
+  await page.goto("/#/planning");
+  await page.locator(".planning-topline .segmented button").nth(1).click();
+  await page
+    .locator(".fixed-course-list article")
+    .nth(1)
+    .locator(".icon-button")
+    .first()
+    .click();
+  const courseDialog = page.getByRole("dialog", { name: "编辑课程" });
+  await courseDialog.getByLabel("可利用总分钟数").fill("40");
+  await courseDialog.getByLabel("安排模式").selectOption("hybrid");
+  await courseDialog.getByRole("button", { name: "添加时段" }).click();
+  const windowInputs = courseDialog.locator(".course-window-row input");
+  await windowInputs.nth(0).fill("14:10");
+  await windowInputs.nth(1).fill("14:30");
+  await courseDialog.getByRole("button", { name: "保存修改" }).click();
+  await page.waitForTimeout(150);
+  const withCourseSettings = await readData(page);
+  const course = withCourseSettings.courses.find(
+    (item: { id: string }) => item.id === "course-design",
+  );
+  expect(course.availableMinutes).toBe(40);
+  expect(course.arrangementMode).toBe("hybrid");
+  expect(course.availableWindows).toHaveLength(1);
+
+  await page.goto("/#/dashboard");
+  await page.locator(".page-actions .button-primary").click();
+  const taskDialog = page.getByRole("dialog", { name: "创建任务" });
+  await taskDialog.getByLabel("任务名称").fill("深度排程属性测试");
+  await taskDialog.locator("details").click();
+  await taskDialog.getByLabel("最短执行时长").fill("25");
+  await taskDialog.getByLabel("拆分方式").selectOption("yes");
+  await taskDialog.getByLabel("专注要求").selectOption("deep");
+  await taskDialog.getByRole("button", { name: "创建任务" }).click();
+  await page.waitForTimeout(150);
+  const withTaskSettings = await readData(page);
+  const task = withTaskSettings.tasks.find(
+    (item: { title: string }) => item.title === "深度排程属性测试",
+  );
+  expect(task.minDuration).toBe(25);
+  expect(task.allowSplit).toBe(true);
+  expect(task.focusRequirement).toBe("deep");
 });
 
 test("stores uploaded evidence as an IndexedDB file and metadata", async ({

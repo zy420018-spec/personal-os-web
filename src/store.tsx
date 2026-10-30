@@ -27,7 +27,7 @@ import type {
 import { createSeedData } from "./data/seed";
 
 const STORAGE_KEY = "personal-os-data-v1";
-const CURRENT_VERSION = 2;
+const CURRENT_VERSION = 3;
 
 const normalizeData = (source: Partial<AppData>): AppData => {
   const defaults = createSeedData();
@@ -35,8 +35,17 @@ const normalizeData = (source: Partial<AppData>): AppData => {
     ...defaults.settings,
     ...(source.settings || {}),
   };
-  const tasks = (source.tasks || []).map((task) => ({
+  const tasks = (source.tasks || []).map((task): Task => ({
     ...task,
+    minDuration:
+      task.minDuration || Math.min(task.estimate, task.estimate > 90 ? 30 : 15),
+    allowSplit: task.allowSplit ?? task.estimate > 90,
+    focusRequirement: task.focusRequirement || "normal",
+    planningScenes:
+      task.planningScenes?.length
+        ? task.planningScenes
+        : ["course" as const, "short-gap" as const, "full-gap" as const],
+    prerequisiteTaskId: task.prerequisiteTaskId || undefined,
     remainingWork: task.remainingWork || "",
     completedAt:
       task.completedAt ||
@@ -49,6 +58,14 @@ const normalizeData = (source: Partial<AppData>): AppData => {
     focusSessionIds: review.focusSessionIds || [],
     evidenceIds: review.evidenceIds || [],
   }));
+  const courses = (source.courses || []).map((course) => ({
+    ...course,
+    availableMinutes: course.availableMinutes || 0,
+    arrangementMode: course.arrangementMode || "manual",
+    allowedTaskFocus: course.allowedTaskFocus || [],
+    avoidStartEnd: course.avoidStartEnd ?? true,
+    availableWindows: course.availableWindows || [],
+  }));
 
   return {
     ...defaults,
@@ -58,7 +75,7 @@ const normalizeData = (source: Partial<AppData>): AppData => {
     projects: source.projects || [],
     tasks,
     schedules: source.schedules || [],
-    courses: source.courses || [],
+    courses,
     courseChanges: source.courseChanges || [],
     focusSessions: source.focusSessions || [],
     evidence: source.evidence || [],

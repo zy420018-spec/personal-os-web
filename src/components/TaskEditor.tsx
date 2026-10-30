@@ -17,6 +17,11 @@ const emptyTask = (projectId?: string, goalId?: string): TaskInput => ({
   priority: "medium",
   deadline: todayKey(),
   estimate: 30,
+  minDuration: 15,
+  allowSplit: false,
+  focusRequirement: "normal",
+  planningScenes: ["course", "short-gap", "full-gap"],
+  prerequisiteTaskId: undefined,
   remainingWork: "",
 });
 
@@ -63,6 +68,11 @@ export function TaskEditor({
             priority: task.priority,
             deadline: task.deadline || "",
             estimate: task.estimate,
+            minDuration: task.minDuration,
+            allowSplit: task.allowSplit,
+            focusRequirement: task.focusRequirement,
+            planningScenes: task.planningScenes,
+            prerequisiteTaskId: task.prerequisiteTaskId,
             remainingWork: task.remainingWork,
           }
         : {
@@ -79,6 +89,14 @@ export function TaskEditor({
     }
     if (form.estimate < 5) {
       setError("预计耗时至少为 5 分钟。");
+      return;
+    }
+    if (form.minDuration < 5 || form.minDuration > form.estimate) {
+      setError("最短执行时长必须在 5 分钟到预计耗时之间。");
+      return;
+    }
+    if (!form.planningScenes.length) {
+      setError("请至少选择一种适用场景。");
       return;
     }
     if (form.status === "partial" && !form.remainingWork.trim()) {
@@ -273,6 +291,112 @@ export function TaskEditor({
               placeholder="补充完成标准、上下文或参考资料"
             />
           </Field>
+          <details className="task-advanced span-2">
+            <summary>排程高级设置</summary>
+            <div className="task-advanced-grid">
+              <Field label="最短执行时长" hint="分钟">
+                <input
+                  type="number"
+                  min={5}
+                  step={5}
+                  value={form.minDuration}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      minDuration: Number(event.target.value),
+                    })
+                  }
+                />
+              </Field>
+              <Field label="拆分方式">
+                <select
+                  value={form.allowSplit ? "yes" : "no"}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      allowSplit: event.target.value === "yes",
+                    })
+                  }
+                >
+                  <option value="no">不允许拆分</option>
+                  <option value="yes">允许拆分</option>
+                </select>
+              </Field>
+              <Field label="专注要求">
+                <select
+                  value={form.focusRequirement}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      focusRequirement: event.target.value as
+                        | "light"
+                        | "normal"
+                        | "deep",
+                    })
+                  }
+                >
+                  <option value="light">轻量</option>
+                  <option value="normal">普通</option>
+                  <option value="deep">深度</option>
+                </select>
+              </Field>
+              <Field label="前置任务">
+                <select
+                  value={form.prerequisiteTaskId || ""}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      prerequisiteTaskId: event.target.value || undefined,
+                    })
+                  }
+                >
+                  <option value="">无前置任务</option>
+                  {data.tasks
+                    .filter((item) => item.id !== task?.id)
+                    .map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.title}
+                      </option>
+                    ))}
+                </select>
+              </Field>
+              <Field label="适用场景" className="span-2">
+                <div className="task-scene-picker">
+                  {[
+                    ["course", "水课"],
+                    ["short-gap", "短空闲"],
+                    ["full-gap", "完整空闲"],
+                  ].map(([value, label]) => (
+                    <label key={value}>
+                      <input
+                        type="checkbox"
+                        checked={form.planningScenes.includes(
+                          value as "course" | "short-gap" | "full-gap",
+                        )}
+                        onChange={(event) =>
+                          setForm({
+                            ...form,
+                            planningScenes: event.target.checked
+                              ? [
+                                  ...form.planningScenes,
+                                  value as
+                                    | "course"
+                                    | "short-gap"
+                                    | "full-gap",
+                                ]
+                              : form.planningScenes.filter(
+                                  (scene) => scene !== value,
+                                ),
+                          })
+                        }
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </Field>
+            </div>
+          </details>
           {form.status === "partial" ? (
             <Field label="剩余工作" required className="span-2">
               <textarea

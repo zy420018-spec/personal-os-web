@@ -533,6 +533,10 @@ export function AssistantPage() {
                   priority: "medium",
                   deadline: todayKey(),
                   estimate: actionEstimate,
+                  minDuration: Math.min(15, actionEstimate),
+                  allowSplit: actionEstimate > 90,
+                  focusRequirement: "normal",
+                  planningScenes: ["short-gap", "full-gap"],
                   remainingWork: "",
                 });
                 addAILog({

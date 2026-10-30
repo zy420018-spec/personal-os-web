@@ -14,6 +14,7 @@ import {
   buildPlanningSuggestions,
   type EnergyLevel,
   type PlanningSuggestion,
+  type UnscheduledTask,
 } from "../planner";
 import {
   Button,
@@ -43,9 +44,7 @@ export function PlanningPage({
   const [energy, setEnergy] = useState<EnergyLevel>("steady");
   const [selected, setSelected] = useState<string[]>([]);
   const [suggestions, setSuggestions] = useState<PlanningSuggestion[]>([]);
-  const [unscheduled, setUnscheduled] = useState<
-    { taskId: string; taskTitle: string; minutes: number }[]
-  >([]);
+  const [unscheduled, setUnscheduled] = useState<UnscheduledTask[]>([]);
   const [summary, setSummary] = useState({ busyMinutes: 0, freeMinutes: 0 });
   const [aiReview, setAiReview] = useState("");
   const [aiReviewLoading, setAiReviewLoading] = useState(false);
@@ -281,7 +280,16 @@ export function PlanningPage({
                   <p>{suggestion.reason}</p>
                   <div className="planner-suggestion-meta">
                     <em>{suggestion.minutes} 分钟</em>
-                    <em>{suggestion.source === "free" ? "完整空闲" : "课程弹性时间"}</em>
+                    <em>
+                      {suggestion.source === "free"
+                        ? "完整空闲"
+                        : suggestion.source === "course-manual"
+                          ? "明确指定时段"
+                          : "课程内系统候选"}
+                    </em>
+                    {suggestion.precision === "suggested" ? (
+                      <em className="suggested">不代表已确认真实空闲</em>
+                    ) : null}
                   </div>
                 </div>
               </label>
@@ -301,6 +309,7 @@ export function PlanningPage({
                 {unscheduled.map((item) => (
                   <p key={item.taskId}>
                     {item.taskTitle} · 还差 {item.minutes} 分钟
+                    <span>{item.reason}</span>
                   </p>
                 ))}
               </div>

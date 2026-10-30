@@ -47,6 +47,24 @@ fs.mkdirSync(output, { recursive: true });
   }
 
   await page.goto(`${base}/#/planning`, { waitUntil: "networkidle" });
+  await page.locator(".planning-topline .segmented button").nth(1).click();
+  await page.waitForTimeout(180);
+  await page.screenshot({
+    path: path.join(output, "desktop-courses.png"),
+    fullPage: true,
+  });
+
+  await page.goto(`${base}/#/planning`, { waitUntil: "networkidle" });
+  await page.locator(".page-actions .button").click();
+  await page.waitForTimeout(220);
+  await page.screenshot({
+    path: path.join(output, "state-planner.png"),
+    fullPage: false,
+  });
+  await page.keyboard.press("Escape");
+
+  await page.goto(`${base}/#/planning`, { waitUntil: "networkidle" });
+  await page.locator(".planning-topline .segmented button").first().click();
   await page.getByRole("button", { name: "添加时间块" }).click();
   await page.screenshot({
     path: path.join(output, "state-schedule-editor.png"),
@@ -83,6 +101,18 @@ fs.mkdirSync(output, { recursive: true });
       fullPage: false,
     });
   }
+  await mobilePage.goto(`${base}/#/planning`, {
+    waitUntil: "networkidle",
+  });
+  await mobilePage
+    .locator(".planning-topline .segmented button")
+    .nth(1)
+    .click();
+  await mobilePage.waitForTimeout(150);
+  await mobilePage.screenshot({
+    path: path.join(output, "mobile-courses.png"),
+    fullPage: false,
+  });
 
   console.log(
     JSON.stringify(

@@ -180,6 +180,10 @@ export function InboxPage({
         priority: "medium",
         deadline,
         estimate,
+        minDuration: Math.min(15, estimate),
+        allowSplit: estimate > 90,
+        focusRequirement: "normal",
+        planningScenes: ["short-gap", "full-gap"],
         remainingWork: "",
       });
       convertedToId = created.id;

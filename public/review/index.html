@@ -61,7 +61,7 @@
       <section class="summary">
         <article><strong>8</strong><span>主要导航入口</span></article>
         <article><strong>3</strong><span>兼容旧入口路由</span></article>
-        <article><strong>7/7</strong><span>V2 自动化测试通过</span></article>
+        <article><strong>22/22</strong><span>智能排程与回归测试通过</span></article>
         <article><strong>待配置</strong><span>真实 AI 密钥与服务地址</span></article>
       </section>
 
@@ -72,7 +72,7 @@
             <li>首页开始、暂停、刷新恢复、结束专注，并同步任务状态。</li>
             <li>文字、网页链接、图片和文件成果；图片预览、文件下载使用 IndexedDB。</li>
             <li>固定课程、上课周次、调课、停课和临时活动独立保存。</li>
-            <li>排程会检查课程、日程、截止时间、耗时、优先级和历史执行比例。</li>
+            <li>排程会检查课程额度、明确利用时段、日程、截止时间、耗时、任务场景和历史执行比例。</li>
             <li>信息库统一收集与知识入口，转化后保存真实对象 ID。</li>
             <li>每日、每周、每月复盘与 Markdown、CSV、打印/PDF 导出。</li>
           </ul>
@@ -137,6 +137,7 @@
             <ul>
               <li>课程名称、星期、周次、地点、教师和备注。</li>
               <li>必须专心、轻度空闲、相对空闲三种课堂属性。</li>
+              <li>水课支持总利用额度、自动/手动/混合模式、允许任务类型和多个具体利用时段。</li>
               <li>停课、调课、临时活动使用 CourseChange，不覆盖原课程。</li>
             </ul>
             <h3>排程输入</h3>
@@ -144,6 +145,8 @@
               <li>课程与临时变动、已有日程、任务截止日和预计耗时。</li>
               <li>优先级、用户精力、历史实际专注比例。</li>
               <li>必须专心的课程会被硬冲突排除。</li>
+              <li>任务支持最短时长、是否可拆、专注要求、适用场景和前置任务。</li>
+              <li>每条建议立即占用时间，水课累计额度与建议之间不会重叠。</li>
               <li>时间不足时会列出无法安排的任务，而不是强行塞入。</li>
             </ul>
             <div class="tags"><span>固定课程</span><span>临时调课</span><span>停课</span><span>活动</span><span>真实空闲计算</span><span>用户确认</span></div>

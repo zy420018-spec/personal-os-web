@@ -6,6 +6,8 @@ export type TaskStatus =
   | "abandoned";
 
 export type Priority = "low" | "medium" | "high" | "urgent";
+export type TaskFocusRequirement = "light" | "normal" | "deep";
+export type TaskPlanningScene = "course" | "short-gap" | "full-gap";
 
 export interface Goal {
   id: string;
@@ -38,6 +40,11 @@ export interface Task {
   priority: Priority;
   deadline?: string;
   estimate: number;
+  minDuration: number;
+  allowSplit: boolean;
+  focusRequirement: TaskFocusRequirement;
+  planningScenes: TaskPlanningScene[];
+  prerequisiteTaskId?: string;
   completedAt?: string;
   remainingWork: string;
   createdAt: string;
@@ -86,6 +93,13 @@ export interface FocusSession {
 }
 
 export type CourseFocusLevel = "must" | "light" | "flexible";
+export type CourseArrangementMode = "auto" | "manual" | "hybrid";
+
+export interface CourseAvailableWindow {
+  id: string;
+  startTime: string;
+  endTime: string;
+}
 
 export interface Course {
   id: string;
@@ -97,6 +111,11 @@ export interface Course {
   teacher?: string;
   weeks: number[];
   focusLevel: CourseFocusLevel;
+  availableMinutes: number;
+  arrangementMode: CourseArrangementMode;
+  allowedTaskFocus: TaskFocusRequirement[];
+  avoidStartEnd: boolean;
+  availableWindows: CourseAvailableWindow[];
   note?: string;
   createdAt: string;
 }

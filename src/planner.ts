@@ -1,10 +1,11 @@
 import type {
   AppData,
+  Course,
   CourseChange,
-  CourseFocusLevel,
   Priority,
   Schedule,
   Task,
+  TaskPlanningScene,
 } from "./types";
 import { dateAt, todayKey } from "./date";
 import {
@@ -26,12 +27,20 @@ export interface PlanningSuggestion {
   end: string;
   minutes: number;
   reason: string;
-  source: "free" | "course-light" | "course-flexible";
+  source: "free" | "course-manual" | "course-auto";
+  precision: "exact" | "suggested";
+}
+
+export interface UnscheduledTask {
+  taskId: string;
+  taskTitle: string;
+  minutes: number;
+  reason: string;
 }
 
 export interface PlanningResult {
   suggestions: PlanningSuggestion[];
-  unscheduled: { taskId: string; taskTitle: string; minutes: number }[];
+  unscheduled: UnscheduledTask[];
   busyMinutes: number;
   freeMinutes: number;
 }
@@ -41,12 +50,30 @@ interface Interval {
   end: number;
 }
 
+interface PlanningWindow {
+  interval: Interval;
+  source: PlanningSuggestion["source"];
+  precision: PlanningSuggestion["precision"];
+  reason: string;
+  courseKey?: string;
+  courseOccurrenceId?: string;
+}
+
+interface CourseUsage {
+  used: number;
+  autoUsed: number;
+  manualQuota: number;
+  capacity: number;
+}
+
 const priorityRank: Record<Priority, number> = {
   urgent: 0,
   high: 1,
   medium: 2,
   low: 3,
 };
+
+const focusRank = { light: 0, normal: 1, deep: 2 } as const;
 
 const mergeIntervals = (intervals: Interval[]) => {
   const sorted = intervals
@@ -63,10 +90,7 @@ const mergeIntervals = (intervals: Interval[]) => {
   }, []);
 };
 
-const subtractIntervals = (
-  range: Interval,
-  blocked: Interval[],
-) => {
+const subtractIntervals = (range: Interval, blocked: Interval[]) => {
   const result: Interval[] = [];
   let cursor = range.start;
   for (const item of mergeIntervals(blocked)) {
@@ -91,21 +115,7 @@ const courseInterval = (course: CourseOccurrence): Interval => ({
   end: timeToMinutes(course.endTime),
 });
 
-const canUseCourseWindow = (
-  course: CourseOccurrence,
-  task: Task,
-  duration: number,
-) => {
-  if (course.focusLevel === "must") return false;
-  if (course.focusLevel === "light") {
-    return duration <= 15 && ["low", "medium"].includes(task.priority);
-  }
-  return (
-    course.focusLevel === "flexible" &&
-    duration <= 30 &&
-    task.priority !== "urgent"
-  );
-};
+const intervalMinutes = (interval: Interval) => interval.end - interval.start;
 
 const historicalRatio = (data: AppData, task: Task) => {
   const sessions = data.focusSessions.filter(
@@ -115,8 +125,8 @@ const historicalRatio = (data: AppData, task: Task) => {
       session.endedAt,
   );
   if (!sessions.length) return 1;
-  const actual = sessions.reduce((sum, session) => {
-    return (
+  const actual = sessions.reduce(
+    (sum, session) =>
       sum +
       Math.max(
         0,
@@ -124,9 +134,9 @@ const historicalRatio = (data: AppData, task: Task) => {
           new Date(session.startedAt).getTime() -
           session.totalPausedMs) /
           60000,
-      )
-    );
-  }, 0);
+      ),
+    0,
+  );
   return Math.min(1.8, Math.max(0.6, actual / Math.max(1, task.estimate)));
 };
 
@@ -134,16 +144,11 @@ const taskRemainingMinutes = (data: AppData, task: Task) => {
   const futureMinutes = data.schedules
     .filter(
       (schedule) =>
-        schedule.taskId === task.id &&
-        schedule.date >= todayKey(),
+        schedule.taskId === task.id && schedule.date >= todayKey(),
     )
     .reduce(
       (sum, schedule) =>
-        sum +
-        Math.max(
-          0,
-          timeToMinutes(schedule.end) - timeToMinutes(schedule.start),
-        ),
+        sum + courseMinutes(schedule.start, schedule.end),
       0,
     );
   return Math.max(
@@ -152,48 +157,199 @@ const taskRemainingMinutes = (data: AppData, task: Task) => {
   );
 };
 
-const energyCapacity = (energy: EnergyLevel) =>
-  energy === "high" ? 1 : energy === "steady" ? 0.86 : 0.68;
+const taskHasIncompletePrerequisite = (data: AppData, task: Task) => {
+  if (!task.prerequisiteTaskId) return false;
+  const prerequisite = data.tasks.find(
+    (item) => item.id === task.prerequisiteTaskId,
+  );
+  return !prerequisite || prerequisite.status !== "done";
+};
 
-const findInWindows = (
-  windows: {
-    interval: Interval;
-    source: PlanningSuggestion["source"];
-    reason: string;
-  }[],
+const sceneForGap = (minutes: number): TaskPlanningScene =>
+  minutes <= 30 ? "short-gap" : "full-gap";
+
+const segmentDuration = (
+  remaining: number,
+  intervalLength: number,
+  minimum: number,
+  allowSplit: boolean,
+) => {
+  if (!allowSplit) {
+    return remaining <= intervalLength ? remaining : undefined;
+  }
+  if (intervalLength < minimum) return undefined;
+  if (remaining <= intervalLength) return remaining;
+  const naturalSegment = Math.min(remaining, intervalLength);
+  const leftover = remaining - naturalSegment;
+  if (leftover > 0 && leftover < minimum) {
+    const adjusted = remaining - minimum;
+    return adjusted >= minimum && adjusted <= intervalLength
+      ? adjusted
+      : undefined;
+  }
+  return naturalSegment;
+};
+
+const findBestWindow = (
+  windows: PlanningWindow[],
   duration: number,
 ) => {
-  let best:
-    | {
-        interval: Interval;
-        source: PlanningSuggestion["source"];
-        reason: string;
-      }
-    | undefined;
+  let best: PlanningWindow | undefined;
   for (const window of windows) {
-    const available = window.interval.end - window.interval.start;
-    if (available >= duration) {
-      if (
-        !best ||
-        available < best.interval.end - best.interval.start
-      ) {
-        best = window;
+    if (intervalMinutes(window.interval) < duration) continue;
+    if (
+      !best ||
+      intervalMinutes(window.interval) < intervalMinutes(best.interval)
+    ) {
+      best = window;
+    }
+  }
+  return best;
+};
+
+const normalizeTaskPlanning = (task: Task): Task => ({
+  ...task,
+  minDuration: task.minDuration || 5,
+  allowSplit: task.allowSplit ?? false,
+  focusRequirement: task.focusRequirement || "normal",
+  planningScenes:
+    task.planningScenes?.length
+      ? task.planningScenes
+      : ["course" as const, "short-gap" as const, "full-gap" as const],
+});
+
+const waterWindowsForOccurrence = (
+  occurrence: CourseOccurrence,
+  course: Course | undefined,
+  task: Task,
+) => {
+  if (
+    !course ||
+    occurrence.kind === "activity" ||
+    occurrence.focusLevel === "must" ||
+    course.availableMinutes <= 0 ||
+    !task.planningScenes.includes("course") ||
+    !course.allowedTaskFocus.includes(task.focusRequirement) ||
+    (task.focusRequirement === "deep" && !course.allowedTaskFocus.includes("deep"))
+  ) {
+    return [];
+  }
+
+  const windows: PlanningWindow[] = [];
+  const courseKey = `${occurrence.date}:${occurrence.courseId}`;
+  const manualWindows =
+    course.arrangementMode === "manual" ||
+    course.arrangementMode === "hybrid"
+      ? course.availableWindows
+      : [];
+  const validManualIntervals: Interval[] = [];
+  for (const window of manualWindows) {
+    if (
+      window.startTime < occurrence.startTime ||
+      window.endTime > occurrence.endTime ||
+      window.endTime <= window.startTime
+    ) {
+      continue;
+    }
+    const interval = {
+      start: timeToMinutes(window.startTime),
+      end: timeToMinutes(window.endTime),
+    };
+    validManualIntervals.push(interval);
+    windows.push({
+      interval,
+      source: "course-manual",
+      precision: "exact",
+      reason: `“${occurrence.title}”中由你明确指定的可利用时段。`,
+      courseKey,
+      courseOccurrenceId: occurrence.id,
+    });
+  }
+
+  if (
+    course.arrangementMode === "auto" ||
+    course.arrangementMode === "hybrid"
+  ) {
+    const buffer = course.avoidStartEnd ? 10 : 0;
+    const autoStart = timeToMinutes(occurrence.startTime) + buffer;
+    const autoEnd = timeToMinutes(occurrence.endTime) - buffer;
+    if (autoEnd > autoStart) {
+      for (const interval of subtractIntervals(
+        { start: autoStart, end: autoEnd },
+        validManualIntervals,
+      )) {
+        windows.push({
+          interval,
+          source: "course-auto",
+          precision: "suggested",
+          reason: `系统根据“${occurrence.title}”的 ${course.availableMinutes} 分钟额度生成的课程内候选；不代表课堂已确认真实空闲。`,
+          courseKey,
+          courseOccurrenceId: occurrence.id,
+        });
       }
     }
   }
-  if (!best) return undefined;
-  return {
-    ...best,
-    start: best.interval.start,
-    end: best.interval.start + duration,
-  };
+  return windows;
+};
+
+const buildCourseUsage = (
+  occurrences: CourseOccurrence[],
+  courses: Course[],
+  state: Map<string, CourseUsage>,
+) => {
+  for (const occurrence of occurrences) {
+    const course = courses.find((item) => item.id === occurrence.courseId);
+    if (!course || course.availableMinutes <= 0) continue;
+    const courseKey = `${occurrence.date}:${occurrence.courseId}`;
+    if (state.has(courseKey)) continue;
+    const manualQuota =
+      course.arrangementMode === "auto"
+        ? 0
+        : Math.min(
+            course.availableMinutes,
+            course.availableWindows
+              .filter(
+                (window) =>
+                  window.startTime >= occurrence.startTime &&
+                  window.endTime <= occurrence.endTime,
+              )
+              .reduce(
+              (sum, window) =>
+                sum +
+                Math.max(
+                  0,
+                  timeToMinutes(window.endTime) -
+                    timeToMinutes(window.startTime),
+                ),
+              0,
+              ),
+          );
+    state.set(courseKey, {
+      used: 0,
+      autoUsed: 0,
+      manualQuota,
+      capacity: Math.min(
+        course.availableMinutes,
+        courseMinutes(occurrence.startTime, occurrence.endTime),
+      ),
+    });
+  }
 };
 
 export const buildPlanningSuggestions = (
   data: AppData,
   energy: EnergyLevel,
 ): PlanningResult => {
+  const suggestions: PlanningSuggestion[] = [];
+  const unscheduled: UnscheduledTask[] = [];
+  const occupiedByDate = new Map<string, Interval[]>();
+  const courseUsage = new Map<string, CourseUsage>();
+  const energyBudget =
+    energy === "low" ? 180 : energy === "steady" ? 360 : 540;
+  let plannedMinutes = 0;
+
   const tasks = data.tasks
+    .map(normalizeTaskPlanning)
     .filter((task) => !["done", "abandoned"].includes(task.status))
     .map((task) => ({
       task,
@@ -204,142 +360,357 @@ export const buildPlanningSuggestions = (
       const deadlineA = a.task.deadline || "9999-12-31";
       const deadlineB = b.task.deadline || "9999-12-31";
       if (deadlineA !== deadlineB) return deadlineA.localeCompare(deadlineB);
-      return priorityRank[a.task.priority] - priorityRank[b.task.priority];
+      const priorityDifference =
+        priorityRank[a.task.priority] - priorityRank[b.task.priority];
+      if (priorityDifference) return priorityDifference;
+      return focusRank[a.task.focusRequirement] - focusRank[b.task.focusRequirement];
     });
 
-  const suggestions: PlanningSuggestion[] = [];
-  const unscheduled: PlanningResult["unscheduled"] = [];
-  let busyMinutes = 0;
-  let freeMinutes = 0;
-  const capacity = energyCapacity(energy);
-
   for (const { task, remaining } of tasks) {
+    if (taskHasIncompletePrerequisite(data, task)) {
+      unscheduled.push({
+        taskId: task.id,
+        taskTitle: task.title,
+        minutes: remaining,
+        reason: "前置任务尚未完成，暂不能安排。",
+      });
+      continue;
+    }
+
     let remainingToPlace = remaining;
     const deadline = task.deadline || dateAt(7);
-    const dayLimit = Math.min(7, Math.max(1, Math.ceil(
-      (new Date(`${deadline}T12:00:00`).getTime() - Date.now()) /
-        (24 * 60 * 60 * 1000),
-    )));
-    const latestDate =
-      deadline < todayKey() ? dateAt(7) : deadline;
+    const dayLimit = Math.min(
+      7,
+      Math.max(
+        1,
+        Math.ceil(
+          (new Date(`${deadline}T12:00:00`).getTime() - Date.now()) /
+            (24 * 60 * 60 * 1000),
+        ),
+      ),
+    );
+    const latestDate = deadline < todayKey() ? dateAt(7) : deadline;
+    let sawSceneMismatch = false;
+    let sawTooShort = false;
+    let sawWaterQuotaExhausted = false;
+    let sawCourseEligibilityMismatch = false;
+    let sawEnergyLimit = false;
+    let sawAnyWindow = false;
 
-    for (let offset = 0; offset <= dayLimit && remainingToPlace > 0; offset += 1) {
+    for (
+      let offset = 0;
+      offset <= dayLimit && remainingToPlace > 0;
+      offset += 1
+    ) {
       const date = dateAt(offset);
       if (date > latestDate) break;
-      const courses = occurrencesForDate(
+      const occurrences = occurrencesForDate(
         date,
         data.courses,
         data.courseChanges as CourseChange[],
         data.settings,
       );
+      buildCourseUsage(occurrences, data.courses, courseUsage);
       const schedules = data.schedules.filter((item) => item.date === date);
-      const scheduledMinutes = schedules.reduce(
-        (sum, item) => sum + courseMinutes(item.start, item.end),
-        0,
-      );
-      const courseBlocked = courses.reduce(
-        (sum, course) =>
-          course.focusLevel === "must"
-            ? sum + courseMinutes(course.startTime, course.endTime)
-            : sum,
-        0,
-      );
-      busyMinutes += scheduledMinutes + courseBlocked;
-
-      const dayStart = timeToMinutes(data.settings.dayStart);
-      const dayEnd = timeToMinutes(data.settings.dayEnd);
-      const today = date === todayKey();
-      const currentMinute = new Date().getHours() * 60 + new Date().getMinutes() + 10;
-      const startFloor = today
-        ? Math.max(dayStart, Math.ceil(currentMinute / 5) * 5)
-        : dayStart;
+      const previousSuggestions = occupiedByDate.get(date) || [];
+      const courseBlocks = occurrences.map(courseInterval);
       const hardBlocks = [
         ...schedules.map(scheduleInterval),
-        ...courses
-          .filter((course) => course.focusLevel === "must")
-          .map(courseInterval),
+        ...courseBlocks,
+        ...previousSuggestions,
       ];
+      const dayStart = timeToMinutes(data.settings.dayStart);
+      const dayEnd = timeToMinutes(data.settings.dayEnd);
+      const nowMinute =
+        new Date().getHours() * 60 + new Date().getMinutes() + 10;
+      const startFloor =
+        date === todayKey()
+          ? Math.max(dayStart, Math.ceil(nowMinute / 5) * 5)
+          : dayStart;
       const free = subtractIntervals(
         { start: startFloor, end: dayEnd },
         hardBlocks,
       );
-      freeMinutes += free.reduce(
-        (sum, interval) => sum + interval.end - interval.start,
-        0,
-      );
+      const freeWindows: PlanningWindow[] = free
+        .filter((interval) =>
+          task.planningScenes.includes(sceneForGap(intervalMinutes(interval))),
+        )
+        .map((interval) => ({
+          interval,
+          source: "free",
+          precision: "exact",
+          reason:
+            sceneForGap(intervalMinutes(interval)) === "short-gap"
+              ? "匹配到一个短空闲时段。"
+              : "匹配到一个完整连续空闲时段。",
+        }));
+      if (!free.length) sawAnyWindow = false;
 
-      const preferredDuration = Math.min(
-        energy === "low" ? 45 : energy === "steady" ? 60 : 90,
-        Math.max(25, Math.ceil(remainingToPlace * capacity)),
-      );
-      const duration = Math.min(
-        remainingToPlace,
-        remainingToPlace <= 90
-          ? remainingToPlace
-          : Math.max(25, preferredDuration),
-      );
-      const windows: {
-        interval: Interval;
-        source: PlanningSuggestion["source"];
-        reason: string;
-      }[] = free.map((interval) => ({
-        interval,
-        source: "free" as const,
-        reason: courses.length
-          ? `避开 ${courses.map((course) => course.title).join("、")} 后的完整空闲时段。`
-          : "当天没有课程冲突，可安排完整专注块。",
-      }));
-      for (const course of courses.filter(
-        (item) => item.focusLevel !== "must",
-      )) {
-        const courseWindow = courseInterval(course);
-        if (canUseCourseWindow(course, task, duration)) {
-          windows.push({
-            interval: courseWindow,
-            source:
-              course.focusLevel === "light"
-                ? "course-light"
-                : "course-flexible",
-            reason: `“${course.title}”为${
-              course.focusLevel === "light" ? "轻度空闲" : "相对空闲"
-            }，适合轻量任务。`,
-          });
+      const courseWindows: PlanningWindow[] = [];
+      for (const occurrence of occurrences) {
+        const sourceCourse = data.courses.find(
+          (course) => course.id === occurrence.courseId,
+        );
+        if (
+          sourceCourse &&
+          occurrence.focusLevel !== "must" &&
+          sourceCourse.availableMinutes > 0 &&
+          (!task.planningScenes.includes("course") ||
+            !sourceCourse.allowedTaskFocus.includes(task.focusRequirement))
+        ) {
+          sawCourseEligibilityMismatch = true;
+        }
+        const candidateWindows = waterWindowsForOccurrence(
+          occurrence,
+          sourceCourse,
+          task,
+        );
+        for (const candidate of candidateWindows) {
+          const otherCourseBlocks = occurrences
+            .filter(
+              (item) => item.id !== candidate.courseOccurrenceId,
+            )
+            .map(courseInterval);
+          const clearParts = subtractIntervals(candidate.interval, [
+            ...schedules.map(scheduleInterval),
+            ...otherCourseBlocks,
+            ...previousSuggestions,
+          ]);
+          for (const interval of clearParts) {
+            courseWindows.push({ ...candidate, interval });
+          }
         }
       }
-      const found = findInWindows(windows, duration);
-      if (!found) continue;
 
-      const energyPenalty =
-        energy === "low" &&
-        found.start < 10 * 60 &&
-        found.interval.end - found.start >= duration + 15
-          ? 15
-          : 0;
-      suggestions.push({
-        id: `suggestion-${task.id}-${date}-${found.start}`,
+      const allWindows = [...freeWindows, ...courseWindows];
+      if (allWindows.length) sawAnyWindow = true;
+
+      const matchingWindows = allWindows.filter((window) => {
+        if (
+          window.source !== "free" &&
+          task.focusRequirement === "deep" &&
+          window.source === "course-auto" &&
+          !sourceAllowsDeep(data.courses, window.courseKey, task)
+        ) {
+          return false;
+        }
+        const scene =
+          window.source === "free"
+            ? sceneForGap(intervalMinutes(window.interval))
+            : "course";
+        return task.planningScenes.includes(scene);
+      });
+      if (!matchingWindows.length) {
+        if (
+          free.length &&
+          !free.some((interval) =>
+            task.planningScenes.includes(
+              sceneForGap(intervalMinutes(interval)),
+            ),
+          )
+        ) {
+          sawSceneMismatch = true;
+        }
+      }
+
+      let chosen:
+        | {
+            window: PlanningWindow;
+            duration: number;
+          }
+        | undefined;
+      for (const window of [...matchingWindows].sort((a, b) => {
+        if (a.source === "course-manual") return -1;
+        if (b.source === "course-manual") return 1;
+        return intervalMinutes(a.interval) - intervalMinutes(b.interval);
+      })) {
+        const usage = window.courseKey
+          ? courseUsage.get(window.courseKey)
+          : undefined;
+        if (window.courseKey && !usage) continue;
+        if (usage) {
+          const autoBudget = Math.max(
+            0,
+            usage.capacity - usage.manualQuota,
+          );
+          if (usage.used >= usage.capacity) {
+            sawWaterQuotaExhausted = true;
+            continue;
+          }
+          if (
+            window.source === "course-auto" &&
+            usage.autoUsed >= autoBudget
+          ) {
+            sawWaterQuotaExhausted = true;
+            continue;
+          }
+        }
+        let duration = segmentDuration(
+          remainingToPlace,
+          intervalMinutes(window.interval),
+          Math.min(task.minDuration, remainingToPlace),
+          task.allowSplit,
+        );
+        if (!duration) {
+          sawTooShort = true;
+          continue;
+        }
+        const energyRemaining = Math.max(0, energyBudget - plannedMinutes);
+        if (duration > energyRemaining) {
+          if (
+            task.allowSplit &&
+            energyRemaining >=
+              Math.min(task.minDuration, remainingToPlace)
+          ) {
+            duration = energyRemaining;
+          } else {
+            sawEnergyLimit = true;
+            continue;
+          }
+        }
+        if (usage && usage.used + duration > usage.capacity) {
+          sawWaterQuotaExhausted = true;
+          continue;
+        }
+        if (
+          usage &&
+          window.source === "course-auto" &&
+          usage.autoUsed + duration >
+            Math.max(0, usage.capacity - usage.manualQuota)
+        ) {
+          sawWaterQuotaExhausted = true;
+          continue;
+        }
+        let start = window.interval.start;
+        if (energy === "low" && start < 10 * 60) {
+          const shifted = start + 15;
+          if (
+            shifted + duration <= window.interval.end ||
+            window.source === "course-auto"
+          ) {
+            start = shifted;
+          }
+        }
+        chosen = { window, duration };
+        chosen.window = {
+          ...window,
+          interval: { start, end: start + duration },
+        };
+        break;
+      }
+
+      if (!chosen) continue;
+      const suggestion: PlanningSuggestion = {
+        id: `suggestion-${task.id}-${date}-${chosen.window.interval.start}`,
         taskId: task.id,
         taskTitle: task.title,
         date,
-        start: minutesToTime(found.start + energyPenalty),
-        end: minutesToTime(found.start + energyPenalty + duration),
-        minutes: duration,
+        start: minutesToTime(chosen.window.interval.start),
+        end: minutesToTime(chosen.window.interval.end),
+        minutes: chosen.duration,
         reason:
-          energy === "low" && energyPenalty
-            ? `${found.reason} 低精力状态下已避开过早时段。`
-            : found.reason,
-        source: found.source,
-      });
-      remainingToPlace -= duration;
+          energy === "low" &&
+          chosen.window.interval.start < 10 * 60
+            ? `${chosen.window.reason} 低精力状态下已避开过早时段。`
+            : chosen.window.reason,
+        source: chosen.window.source,
+        precision: chosen.window.precision,
+      };
+      suggestions.push(suggestion);
+      occupiedByDate.set(date, [
+        ...(occupiedByDate.get(date) || []),
+        chosen.window.interval,
+      ]);
+      if (chosen.window.courseKey) {
+        const usage = courseUsage.get(chosen.window.courseKey)!;
+        usage.used += chosen.duration;
+        if (chosen.window.source === "course-auto") {
+          usage.autoUsed += chosen.duration;
+        }
+      }
+      remainingToPlace -= chosen.duration;
+      plannedMinutes += chosen.duration;
+      if (task.allowSplit && remainingToPlace > 0) {
+        offset -= 1;
+      }
     }
 
     if (remainingToPlace > 0) {
+      let reason = "截止日期前没有符合任务专注要求和场景的空闲时间。";
+      if (sawSceneMismatch) {
+        reason = task.allowSplit
+          ? "现有空闲时间的长度不符合任务适用场景。"
+          : "没有足够长的连续时间，现有空闲时间长度不符合任务场景。";
+      } else if (sawEnergyLimit) {
+        reason = "当前精力水平下已接近本次规划负荷上限，剩余任务暂不强行安排。";
+      } else if (sawTooShort) {
+        reason = task.allowSplit
+          ? "没有满足最短执行时长的剩余时间。"
+          : "没有足够长的连续时间，任务又设置为不可拆分。";
+      } else if (sawWaterQuotaExhausted) {
+        reason = "水课可利用额度不足，或已被其他建议占用。";
+      } else if (sawCourseEligibilityMismatch) {
+        reason = "任务类型或适用场景与水课允许规则不匹配。";
+      } else if (!sawAnyWindow) {
+        reason = "截止日期前没有可用的空闲时间。";
+      }
       unscheduled.push({
         taskId: task.id,
         taskTitle: task.title,
         minutes: remainingToPlace,
+        reason,
       });
     }
   }
 
+  let busyMinutes = 0;
+  let freeMinutes = 0;
+  for (let offset = 0; offset < 8; offset += 1) {
+    const date = dateAt(offset);
+    const occurrences = occurrencesForDate(
+      date,
+      data.courses,
+      data.courseChanges,
+      data.settings,
+    );
+    const schedules = data.schedules.filter((item) => item.date === date);
+    const blocks = [
+      ...schedules.map(scheduleInterval),
+      ...occurrences.map(courseInterval),
+    ];
+    busyMinutes += blocks.reduce(
+      (sum, interval) => sum + intervalMinutes(interval),
+      0,
+    );
+    const dayStart = timeToMinutes(data.settings.dayStart);
+    const dayEnd = timeToMinutes(data.settings.dayEnd);
+    const startFloor =
+      date === todayKey()
+        ? Math.max(
+            dayStart,
+            new Date().getHours() * 60 + new Date().getMinutes() + 10,
+          )
+        : dayStart;
+    freeMinutes += subtractIntervals(
+      { start: startFloor, end: dayEnd },
+      blocks,
+    ).reduce((sum, interval) => sum + intervalMinutes(interval), 0);
+  }
+
   return { suggestions, unscheduled, busyMinutes, freeMinutes };
+};
+
+const sourceAllowsDeep = (
+  courses: Course[],
+  courseKey: string | undefined,
+  task: Task,
+) => {
+  if (!courseKey) return false;
+  const courseId = courseKey.split(":").slice(1).join(":");
+  const course = courses.find((item) => item.id === courseId);
+  return Boolean(
+    course &&
+      course.allowedTaskFocus.includes("deep") &&
+      task.planningScenes.includes("course"),
+  );
 };

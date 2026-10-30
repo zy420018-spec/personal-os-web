@@ -567,6 +567,10 @@ export function FocusPage({
                       priority: "medium",
                       deadline: todayKey(),
                       estimate: 30,
+                      minDuration: 15,
+                      allowSplit: false,
+                      focusRequirement: "normal",
+                      planningScenes: ["short-gap", "full-gap"],
                       remainingWork: "",
                     });
                     setSelectionOpen(false);

@@ -55,6 +55,11 @@ const emptyCourse = (): CourseInput => ({
   teacher: "",
   weeks: Array.from({ length: 16 }, (_, index) => index + 1),
   focusLevel: "must",
+  availableMinutes: 0,
+  arrangementMode: "manual",
+  allowedTaskFocus: ["light"],
+  avoidStartEnd: true,
+  availableWindows: [],
   note: "",
 });
 
@@ -131,6 +136,11 @@ export function CoursesPage({ embedded = false }: { embedded?: boolean }) {
             teacher: course.teacher || "",
             weeks: course.weeks,
             focusLevel: course.focusLevel,
+            availableMinutes: course.availableMinutes,
+            arrangementMode: course.arrangementMode,
+            allowedTaskFocus: course.allowedTaskFocus,
+            avoidStartEnd: course.avoidStartEnd,
+            availableWindows: course.availableWindows,
             note: course.note || "",
           }
         : emptyCourse(),
@@ -154,6 +164,83 @@ export function CoursesPage({ embedded = false }: { embedded?: boolean }) {
       setError("下课时间需要晚于上课时间。");
       return;
     }
+    const courseDuration =
+      Number(courseForm.endTime.slice(0, 2)) * 60 +
+      Number(courseForm.endTime.slice(3)) -
+      (Number(courseForm.startTime.slice(0, 2)) * 60 +
+        Number(courseForm.startTime.slice(3)));
+    if (courseForm.availableMinutes > courseDuration) {
+      setError("可利用总分钟数不能超过课程总时长。");
+      return;
+    }
+    if (
+      courseForm.focusLevel !== "must" &&
+      courseForm.availableMinutes > 0 &&
+      !courseForm.allowedTaskFocus.length
+    ) {
+      setError("启用课堂可利用时间后，请至少选择一种允许的任务类型。");
+      return;
+    }
+    const invalidWindow = courseForm.availableWindows.find(
+      (window) =>
+        window.startTime < courseForm.startTime ||
+        window.endTime > courseForm.endTime ||
+        window.endTime <= window.startTime,
+    );
+    if (invalidWindow) {
+      setError("可利用时段必须晚于课程开始、早于课程结束，并保持正确顺序。");
+      return;
+    }
+    const fixedWindowConflict = courseForm.availableWindows.find((window) =>
+      data.courses.some(
+        (course) =>
+          course.id !== editingCourse?.id &&
+          course.weekdays.some((day) =>
+            courseForm.weekdays.includes(day),
+          ) &&
+          weeks.some((week) => course.weeks.includes(week)) &&
+          window.startTime < course.endTime &&
+          window.endTime > course.startTime,
+      ),
+    );
+    if (fixedWindowConflict) {
+      setError("可利用时段与其他固定课程时间冲突。");
+      return;
+    }
+    const sortedWindows = [...courseForm.availableWindows].sort((a, b) =>
+      a.startTime.localeCompare(b.startTime),
+    );
+    const overlappingWindow = sortedWindows.find(
+      (window, index) =>
+        index > 0 &&
+        window.startTime < sortedWindows[index - 1].endTime,
+    );
+    if (overlappingWindow) {
+      setError("多个可利用时段之间不能重叠。");
+      return;
+    }
+    const manualMinutes = sortedWindows.reduce((sum, window) => {
+      const [startHour, startMinute] = window.startTime.split(":").map(Number);
+      const [endHour, endMinute] = window.endTime.split(":").map(Number);
+      return sum + endHour * 60 + endMinute - startHour * 60 - startMinute;
+    }, 0);
+    if (
+      courseForm.focusLevel !== "must" &&
+      courseForm.arrangementMode !== "auto" &&
+      manualMinutes > courseForm.availableMinutes
+    ) {
+      setError("手动指定时段的总时长不能超过可利用总额度。");
+      return;
+    }
+    if (
+      courseForm.focusLevel !== "must" &&
+      courseForm.arrangementMode === "manual" &&
+      courseForm.availableMinutes > 0 &&
+      manualMinutes === 0
+    ) {
+      setError("手动模式需要至少一个具体可利用时段。");
+      return;
+    }
     const conflictedCourse = data.courses.find(
       (course) =>
         course.id !== editingCourse?.id &&
@@ -173,6 +260,15 @@ export function CoursesPage({ embedded = false }: { embedded?: boolean }) {
       teacher: courseForm.teacher?.trim(),
       note: courseForm.note?.trim(),
       weeks,
+      availableWindows:
+        courseForm.focusLevel === "must" ||
+        courseForm.arrangementMode === "auto"
+          ? []
+          : sortedWindows,
+      availableMinutes:
+        courseForm.focusLevel === "must"
+          ? 0
+          : Math.max(0, courseForm.availableMinutes),
     };
     if (editingCourse) {
       updateCourse({ ...editingCourse, ...normalized });
@@ -606,6 +702,189 @@ export function CoursesPage({ embedded = false }: { embedded?: boolean }) {
               ]}
             />
           </Field>
+          {courseForm.focusLevel !== "must" ? (
+            <div className="course-water-settings span-2">
+              <div className="course-water-heading">
+                <div>
+                  <strong>课堂可利用时间</strong>
+                  <p>额度是整节课的总上限，不代表一段连续空闲时间。</p>
+                </div>
+                <span>{courseForm.availableMinutes} 分钟</span>
+              </div>
+              <div className="form-grid">
+                <Field label="可利用总分钟数">
+                  <input
+                    type="number"
+                    min={0}
+                    step={5}
+                    value={courseForm.availableMinutes}
+                    onChange={(event) =>
+                      setCourseForm({
+                        ...courseForm,
+                        availableMinutes: Math.max(
+                          0,
+                          Number(event.target.value),
+                        ),
+                      })
+                    }
+                  />
+                </Field>
+                <Field label="安排模式">
+                  <select
+                    value={courseForm.arrangementMode}
+                    onChange={(event) =>
+                      setCourseForm({
+                        ...courseForm,
+                        arrangementMode: event.target
+                          .value as CourseInput["arrangementMode"],
+                      })
+                    }
+                  >
+                    <option value="auto">自动建议（本地规则）</option>
+                    <option value="manual">手动指定时段</option>
+                    <option value="hybrid">混合模式</option>
+                  </select>
+                </Field>
+                <Field label="允许安排的任务类型" className="span-2">
+                  <div className="task-scene-picker">
+                    {[
+                      ["light", "轻量任务"],
+                      ["normal", "普通任务"],
+                      ["deep", "深度任务"],
+                    ].map(([value, label]) => (
+                      <label key={value}>
+                        <input
+                          type="checkbox"
+                          checked={courseForm.allowedTaskFocus.includes(
+                            value as "light" | "normal" | "deep",
+                          )}
+                          onChange={(event) =>
+                            setCourseForm({
+                              ...courseForm,
+                              allowedTaskFocus: event.target.checked
+                                ? [
+                                    ...courseForm.allowedTaskFocus,
+                                    value as "light" | "normal" | "deep",
+                                  ]
+                                : courseForm.allowedTaskFocus.filter(
+                                    (item) => item !== value,
+                                  ),
+                            })
+                          }
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </Field>
+                <label className="settings-checkbox span-2">
+                  <input
+                    type="checkbox"
+                    checked={courseForm.avoidStartEnd}
+                    onChange={(event) =>
+                      setCourseForm({
+                        ...courseForm,
+                        avoidStartEnd: event.target.checked,
+                      })
+                    }
+                  />
+                  <span>
+                    <strong>自动候选尽量避开课程开始和结束阶段</strong>
+                    <small>
+                      系统会保留前后缓冲；这仍是建议，不表示课堂中已确认真实空闲。
+                    </small>
+                  </span>
+                </label>
+              </div>
+              {courseForm.arrangementMode !== "auto" ? (
+                <div className="course-window-editor">
+                  <div>
+                    <strong>具体可利用时段</strong>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      icon={Plus}
+                      onClick={() =>
+                        setCourseForm({
+                          ...courseForm,
+                          availableWindows: [
+                            ...courseForm.availableWindows,
+                            {
+                              id: `window-${Date.now()}`,
+                              startTime: courseForm.startTime,
+                              endTime: courseForm.startTime,
+                            },
+                          ],
+                        })
+                      }
+                    >
+                      添加时段
+                    </Button>
+                  </div>
+                  {courseForm.availableWindows.map((window) => (
+                    <div className="course-window-row" key={window.id}>
+                      <input
+                        type="time"
+                        value={window.startTime}
+                        onChange={(event) =>
+                          setCourseForm({
+                            ...courseForm,
+                            availableWindows: courseForm.availableWindows.map(
+                              (item) =>
+                                item.id === window.id
+                                  ? {
+                                      ...item,
+                                      startTime: event.target.value,
+                                    }
+                                  : item,
+                            ),
+                          })
+                        }
+                      />
+                      <span>至</span>
+                      <input
+                        type="time"
+                        value={window.endTime}
+                        onChange={(event) =>
+                          setCourseForm({
+                            ...courseForm,
+                            availableWindows: courseForm.availableWindows.map(
+                              (item) =>
+                                item.id === window.id
+                                  ? {
+                                      ...item,
+                                      endTime: event.target.value,
+                                    }
+                                  : item,
+                            ),
+                          })
+                        }
+                      />
+                      <IconButton
+                        icon={Trash2}
+                        label="删除可利用时段"
+                        onClick={() =>
+                          setCourseForm({
+                            ...courseForm,
+                            availableWindows:
+                              courseForm.availableWindows.filter(
+                                (item) => item.id !== window.id,
+                              ),
+                          })
+                        }
+                      />
+                    </div>
+                  ))}
+                  {!courseForm.availableWindows.length ? (
+                    <p className="small-empty">
+                      尚未指定具体时段。手动模式必须至少添加一个时段。
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <Field label="课程备注" className="span-2">
             <textarea
               rows={3}
