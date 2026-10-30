@@ -9,6 +9,8 @@ import {
   Clock3,
   Command,
   Compass,
+  Database,
+  Download,
   Inbox,
   LayoutDashboard,
   Menu,
@@ -18,6 +20,7 @@ import {
   Sparkles,
   Target,
   TrendingUp,
+  Upload,
   X,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -28,21 +31,19 @@ import { Button, Field, IconButton, Modal, useToast } from "./ui";
 
 const navItems = [
   { id: "dashboard" as const, label: "首页", icon: LayoutDashboard },
-  { id: "schedule" as const, label: "日程", icon: CalendarDays },
+  { id: "planning" as const, label: "规划", icon: CalendarDays },
   { id: "goals" as const, label: "目标与项目", icon: Target },
-  { id: "inbox" as const, label: "收集箱", icon: Inbox },
-  { id: "knowledge" as const, label: "知识库", icon: Archive },
+  { id: "library" as const, label: "信息库", icon: Archive },
   { id: "growth" as const, label: "成长档案", icon: TrendingUp },
   { id: "assistant" as const, label: "AI 助理", icon: Sparkles },
-  { id: "focus" as const, label: "执行", icon: Clock3 },
   { id: "review" as const, label: "复盘", icon: CheckCircle2 },
   { id: "notifications" as const, label: "通知", icon: Bell },
 ];
 
 const mobileNavIds: PageId[] = [
   "dashboard",
-  "schedule",
-  "inbox",
+  "planning",
+  "library",
   "assistant",
 ];
 
@@ -65,15 +66,29 @@ export function AppShell({
   onNavigate: (page: PageId) => void;
   children: ReactNode;
 }) {
-  const { data, createInboxItem, setSettings } = useStore();
+  const {
+    data,
+    createInboxItem,
+    setSettings,
+    importData,
+  } = useStore();
   const toast = useToast();
   const [quickOpen, setQuickOpen] = useState(false);
   const [mobileMenu, setMobileMenu] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [quickText, setQuickText] = useState("");
-  const [profileName, setProfileName] = useState(data.settings.name);
+  const [settingsDraft, setSettingsDraft] = useState(data.settings);
   const unread = data.notifications.filter((item) => !item.read).length;
-  const current = navItems.find((item) => item.id === page);
+  const legacyNavMap: Partial<Record<PageId, PageId>> = {
+    schedule: "planning",
+    inbox: "library",
+    knowledge: "library",
+  };
+  const current =
+    navItems.find((item) => item.id === page) ||
+    navItems.find((item) => item.id === legacyNavMap[page]);
+  const activePage = legacyNavMap[page] || page;
+  const directPageLabel = page === "focus" ? "执行" : "首页";
 
   const navigate = (target: PageId) => {
     onNavigate(target);
@@ -94,7 +109,12 @@ export function AppShell({
   };
 
   const saveSettings = () => {
-    setSettings({ ...data.settings, name: profileName.trim() || "你" });
+    setSettings({
+      ...data.settings,
+      ...settingsDraft,
+      name: settingsDraft.name.trim() || "你",
+      aiEndpoint: settingsDraft.aiEndpoint.trim(),
+    });
     setSettingsOpen(false);
     toast("个人设置已保存");
   };
@@ -124,7 +144,7 @@ export function AppShell({
             return (
               <button
                 key={item.id}
-                className={page === item.id ? "active" : ""}
+                className={activePage === item.id ? "active" : ""}
                 onClick={() => navigate(item.id)}
               >
                 <Icon size={18} strokeWidth={1.8} />
@@ -154,7 +174,7 @@ export function AppShell({
           <button
             className="profile-row"
             onClick={() => {
-              setProfileName(data.settings.name);
+              setSettingsDraft(data.settings);
               setSettingsOpen(true);
             }}
           >
@@ -190,12 +210,14 @@ export function AppShell({
             </button>
             <span className="topbar-date">{formatChineseDate()}</span>
             <span className="topbar-separator">·</span>
-            <span className="topbar-section">{current?.label || "首页"}</span>
+            <span className="topbar-section">
+              {current?.label || directPageLabel}
+            </span>
           </div>
           <div className="topbar-actions">
             <button
               className="global-search"
-              onClick={() => navigate("knowledge")}
+              onClick={() => navigate("library")}
             >
               <Search size={16} />
               <span>搜索知识库</span>
@@ -222,7 +244,7 @@ export function AppShell({
             <button
               className="topbar-avatar"
               onClick={() => {
-                setProfileName(data.settings.name);
+                setSettingsDraft(data.settings);
                 setSettingsOpen(true);
               }}
               aria-label="打开个人设置"
@@ -241,7 +263,7 @@ export function AppShell({
           return (
             <button
               key={id}
-              className={page === id ? "active" : ""}
+              className={activePage === id ? "active" : ""}
               onClick={() => navigate(id)}
             >
               <Icon size={20} />
@@ -299,8 +321,9 @@ export function AppShell({
       <Modal
         open={settingsOpen}
         title="个人设置"
-        description="当前数据仅保存在这个浏览器中。"
+        description="数据默认保存在这个浏览器中；AI 密钥只能配置在服务端。"
         onClose={() => setSettingsOpen(false)}
+        width="680px"
         footer={
           <>
             <Button
@@ -324,18 +347,175 @@ export function AppShell({
         </div>
         <Field label="显示名称">
           <input
-            value={profileName}
-            onChange={(event) => setProfileName(event.target.value)}
+            value={settingsDraft.name}
+            onChange={(event) =>
+              setSettingsDraft({
+                ...settingsDraft,
+                name: event.target.value,
+              })
+            }
             maxLength={20}
           />
         </Field>
+
+        <div className="settings-section">
+          <h3>课程与可用时间</h3>
+          <div className="form-grid">
+            <Field label="学期开始日期">
+              <input
+                type="date"
+                value={settingsDraft.semesterStart}
+                onChange={(event) =>
+                  setSettingsDraft({
+                    ...settingsDraft,
+                    semesterStart: event.target.value,
+                  })
+                }
+              />
+            </Field>
+            <Field label="学期总周数">
+              <input
+                type="number"
+                min={1}
+                max={60}
+                value={settingsDraft.totalWeeks}
+                onChange={(event) =>
+                  setSettingsDraft({
+                    ...settingsDraft,
+                    totalWeeks: Number(event.target.value),
+                  })
+                }
+              />
+            </Field>
+            <Field label="每日规划开始">
+              <input
+                type="time"
+                value={settingsDraft.dayStart}
+                onChange={(event) =>
+                  setSettingsDraft({
+                    ...settingsDraft,
+                    dayStart: event.target.value,
+                  })
+                }
+              />
+            </Field>
+            <Field label="每日规划结束">
+              <input
+                type="time"
+                value={settingsDraft.dayEnd}
+                onChange={(event) =>
+                  setSettingsDraft({
+                    ...settingsDraft,
+                    dayEnd: event.target.value,
+                  })
+                }
+              />
+            </Field>
+          </div>
+        </div>
+
+        <div className="settings-section">
+          <h3>真实 AI 服务</h3>
+          <Field
+            label="服务端代理地址"
+            hint="例如 https://your-api.example.com/api/ai"
+          >
+            <input
+              type="url"
+              value={settingsDraft.aiEndpoint}
+              onChange={(event) =>
+                setSettingsDraft({
+                  ...settingsDraft,
+                  aiEndpoint: event.target.value,
+                })
+              }
+              placeholder="留空表示尚未配置真实 AI"
+            />
+          </Field>
+          <label className="settings-checkbox">
+            <input
+              type="checkbox"
+              checked={settingsDraft.aiConsent}
+              onChange={(event) =>
+                setSettingsDraft({
+                  ...settingsDraft,
+                  aiConsent: event.target.checked,
+                })
+              }
+            />
+            <span>
+              <strong>授权发送工作台上下文</strong>
+              <small>
+                包含目标、项目、任务、课程、日程、执行、成果、信息库、复盘和成长记录。
+              </small>
+            </span>
+          </label>
+        </div>
+
         <div className="settings-note">
           <BrainCircuit size={18} />
           <div>
-            <strong>模拟 AI 说明</strong>
+            <strong>安全边界</strong>
             <p>
-              当前版本尚未接入真实模型。所有带“模拟 AI”标记的内容均由本地规则生成。
+              前端不会保存 API Key。GitHub Pages 只提供静态页面，真实 AI
+              必须通过另行部署的服务端代理访问模型。
             </p>
+          </div>
+        </div>
+
+        <div className="settings-section">
+          <h3>本地数据备份</h3>
+          <div className="settings-data-actions">
+            <Button
+              variant="secondary"
+              icon={Download}
+              onClick={() => {
+                const content = JSON.stringify(data, null, 2);
+                const blob = new Blob([content], {
+                  type: "application/json",
+                });
+                const url = URL.createObjectURL(blob);
+                const anchor = document.createElement("a");
+                anchor.href = url;
+                anchor.download = `personal-os-backup-${todayKey()}.json`;
+                anchor.click();
+                window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+                toast("工作台数据已导出");
+              }}
+            >
+              导出 JSON
+            </Button>
+            <label className="button button-secondary button-md settings-upload">
+              <Upload size={16} />
+              导入备份
+              <input
+                type="file"
+                accept="application/json,.json"
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    const parsed = JSON.parse(await file.text());
+                    if (!parsed || !Array.isArray(parsed.tasks)) {
+                      throw new Error("文件中没有有效的 PersonalOS 数据。");
+                    }
+                    importData(parsed);
+                    setSettingsOpen(false);
+                    toast("数据已导入；旧数据会先保留为自动备份");
+                  } catch (importError) {
+                    toast(
+                      importError instanceof Error
+                        ? importError.message
+                        : "导入失败",
+                    );
+                  }
+                }}
+              />
+            </label>
+            <span>
+              <Database size={14} />
+              JSON 包含结构化数据，不包含 IndexedDB 中的文件二进制。
+            </span>
           </div>
         </div>
       </Modal>

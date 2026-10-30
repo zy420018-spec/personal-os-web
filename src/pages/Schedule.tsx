@@ -32,6 +32,7 @@ import {
   Tabs,
   useToast,
 } from "../components/ui";
+import { occurrencesForDate } from "../course";
 
 type ViewMode = "day" | "week" | "month";
 
@@ -52,7 +53,13 @@ const addDays = (date: Date, amount: number) => {
   return result;
 };
 
-export function SchedulePage() {
+export function SchedulePage({
+  embedded = false,
+  onOpenPlanner,
+}: {
+  embedded?: boolean;
+  onOpenPlanner?: () => void;
+} = {}) {
   const {
     data,
     createSchedule,
@@ -122,6 +129,42 @@ export function SchedulePage() {
       setError("结束时间需要晚于开始时间。");
       return;
     }
+    const overlaps = (startA: string, endA: string, startB: string, endB: string) =>
+      startA < endB && endA > startB;
+    const scheduleConflict = data.schedules.find(
+      (schedule) =>
+        schedule.id !== editing?.id &&
+        schedule.date === form.date &&
+        overlaps(
+          form.start,
+          form.end,
+          schedule.start,
+          schedule.end,
+        ),
+    );
+    if (scheduleConflict) {
+      setError(`与已有日程“${scheduleConflict.title}”时间重叠。`);
+      return;
+    }
+    const courseConflict = occurrencesForDate(
+      form.date,
+      data.courses,
+      data.courseChanges,
+      data.settings,
+    ).find(
+      (course) =>
+        course.focusLevel === "must" &&
+        overlaps(
+          form.start,
+          form.end,
+          course.startTime,
+          course.endTime,
+        ),
+    );
+    if (courseConflict) {
+      setError(`与必须专心的课程“${courseConflict.title}”时间冲突。`);
+      return;
+    }
     const normalized = {
       ...form,
       title: form.title.trim(),
@@ -160,7 +203,10 @@ export function SchedulePage() {
   const pendingTasks = data.tasks.filter(
     (task) =>
       !["done", "abandoned"].includes(task.status) &&
-      !data.schedules.some((schedule) => schedule.taskId === task.id),
+      !data.schedules.some(
+        (schedule) =>
+          schedule.taskId === task.id && schedule.date >= todayKey(),
+      ),
   );
   const occupiedMinutes = daySchedules.reduce((total, item) => {
     const [sh, sm] = item.start.split(":").map(Number);
@@ -248,17 +294,19 @@ export function SchedulePage() {
   );
 
   return (
-    <div className="page schedule-page">
-      <PageHeader
-        eyebrow="时间规划"
-        title="日程"
-        description="给任务预留时间，实际执行会单独记录。"
-        actions={
-          <Button icon={CalendarPlus} onClick={() => openCreate()}>
-            新建日程
-          </Button>
-        }
-      />
+    <div className={`${embedded ? "embedded-page" : "page"} schedule-page`}>
+      {!embedded ? (
+        <PageHeader
+          eyebrow="时间规划"
+          title="日程"
+          description="给任务预留时间，实际执行会单独记录。"
+          actions={
+            <Button icon={CalendarPlus} onClick={() => openCreate()}>
+              新建日程
+            </Button>
+          }
+        />
+      ) : null}
 
       <div className="schedule-toolbar">
         <div className="date-navigator">
@@ -489,7 +537,6 @@ export function SchedulePage() {
           <section className="panel smart-panel">
             <div className="panel-heading compact">
               <div>
-                <SimulatedTag />
                 <h2>规划建议</h2>
               </div>
               <Bot size={19} />
@@ -510,33 +557,25 @@ export function SchedulePage() {
             <div className="suggestion-card">
               <Sparkles size={16} />
               <div>
-                <strong>建议优先安排紧急任务</strong>
+                <strong>从真实空闲时间生成安排</strong>
                 <p>
-                  {pendingTasks[0]?.title || "当前没有待安排任务"}
+                  {pendingTasks.length
+                    ? `${pendingTasks.length} 项任务待安排，将同时检查课程与已有日程`
+                    : "当前没有任务需要额外安排"}
                 </p>
               </div>
-              {pendingTasks[0] ? (
+              {pendingTasks.length && onOpenPlanner ? (
                 <Button
                   size="sm"
                   variant="secondary"
-                  onClick={() => {
-                    setForm({
-                      ...emptySchedule(dateKey),
-                      title: pendingTasks[0].title,
-                      taskId: pendingTasks[0].id,
-                      start: "16:00",
-                      end: "17:00",
-                    });
-                    setEditing(undefined);
-                    setEditorOpen(true);
-                  }}
+                  onClick={onOpenPlanner}
                 >
-                  安排
+                  开始排程
                 </Button>
               ) : null}
             </div>
             <p className="simulation-disclaimer">
-              本地规则生成，不会自动修改正式日程。
+              使用可解释的本地时间规则，确认后才会写入日程。
             </p>
           </section>
 

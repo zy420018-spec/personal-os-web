@@ -4,6 +4,7 @@ import type { Task, TaskStatus, Priority } from "../types";
 import { useStore } from "../store";
 import { todayKey } from "../date";
 import { useToast, Button, ConfirmDialog, Field, Modal } from "./ui";
+import { EvidenceManager } from "./EvidenceManager";
 
 type TaskInput = Omit<Task, "id" | "createdAt" | "updatedAt">;
 
@@ -16,6 +17,7 @@ const emptyTask = (projectId?: string, goalId?: string): TaskInput => ({
   priority: "medium",
   deadline: todayKey(),
   estimate: 30,
+  remainingWork: "",
 });
 
 export function TaskEditor({
@@ -61,6 +63,7 @@ export function TaskEditor({
             priority: task.priority,
             deadline: task.deadline || "",
             estimate: task.estimate,
+            remainingWork: task.remainingWork,
           }
         : {
             ...emptyTask(projectId, goalId),
@@ -76,6 +79,10 @@ export function TaskEditor({
     }
     if (form.estimate < 5) {
       setError("预计耗时至少为 5 分钟。");
+      return;
+    }
+    if (form.status === "partial" && !form.remainingWork.trim()) {
+      setError("部分完成任务需要写明剩余工作。");
       return;
     }
     const hasEvidence = task
@@ -94,6 +101,7 @@ export function TaskEditor({
       ...form,
       title: form.title.trim(),
       description: form.description.trim(),
+      remainingWork: form.remainingWork.trim(),
       deadline: form.deadline || undefined,
       goalId: form.goalId || linkedProject?.goalId,
     };
@@ -102,6 +110,7 @@ export function TaskEditor({
       if (normalized.status === "done" && !hasEvidence) {
         createEvidence({
           taskId: task.id,
+          projectId: task.projectId,
           type: "text",
           title: `${normalized.title} · 完成成果`,
           content: normalized.description,
@@ -113,6 +122,7 @@ export function TaskEditor({
       if (normalized.status === "done") {
         createEvidence({
           taskId: created.id,
+          projectId: created.projectId,
           type: "text",
           title: `${normalized.title} · 完成成果`,
           content: normalized.description,
@@ -263,8 +273,27 @@ export function TaskEditor({
               placeholder="补充完成标准、上下文或参考资料"
             />
           </Field>
+          {form.status === "partial" ? (
+            <Field label="剩余工作" required className="span-2">
+              <textarea
+                rows={3}
+                value={form.remainingWork}
+                onChange={(event) =>
+                  setForm({ ...form, remainingWork: event.target.value })
+                }
+                placeholder="记录还没完成的具体内容，方便下次继续"
+              />
+            </Field>
+          ) : null}
         </div>
         {error ? <p className="form-error">{error}</p> : null}
+        {task ? (
+          <EvidenceManager taskId={task.id} sessionId={undefined} compact />
+        ) : (
+          <p className="form-hint">
+            创建任务后，可在任务详情中追加文字、图片、文件或链接成果。
+          </p>
+        )}
       </Modal>
       <ConfirmDialog
         open={confirmDelete}

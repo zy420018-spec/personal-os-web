@@ -423,6 +423,7 @@ export function NotificationsPage({
                   priority: "medium",
                   deadline: todayKey(),
                   estimate: 30,
+                  remainingWork: "",
                 });
                 addAILog({
                   action: "从跟进建议创建任务",

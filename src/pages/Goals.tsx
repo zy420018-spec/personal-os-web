@@ -433,7 +433,7 @@ export function GoalsPage({
                 <span>
                   <Archive size={15} /> 相关资料可在知识库关联到此项目
                 </span>
-                <button onClick={() => onNavigate("knowledge")}>
+                <button onClick={() => onNavigate("library")}>
                   查看关联内容 <ArrowRight size={14} />
                 </button>
               </div>

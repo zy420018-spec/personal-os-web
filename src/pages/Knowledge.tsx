@@ -17,6 +17,7 @@ import { useMemo, useState } from "react";
 import type { KnowledgeItem } from "../types";
 import { useStore } from "../store";
 import { formatShortDate } from "../date";
+import { requestAI } from "../ai";
 import {
   Button,
   ConfirmDialog,
@@ -49,7 +50,7 @@ const typeLabel: Record<KnowledgeItem["type"], string> = {
   link: "链接",
 };
 
-export function KnowledgePage() {
+export function KnowledgePage({ embedded = false }: { embedded?: boolean }) {
   const {
     data,
     createKnowledge,
@@ -150,9 +151,34 @@ export function KnowledgePage() {
     setEditorOpen(false);
   };
 
-  const askQuestion = () => {
+  const askQuestion = async () => {
     if (!question.trim()) return;
     setQaLoading(true);
+    setAnswer("");
+    if (data.settings.aiEndpoint && data.settings.aiConsent) {
+      try {
+        const result = await requestAI({
+          endpoint: data.settings.aiEndpoint,
+          message: question.trim(),
+          mode: "advisory",
+          history: [],
+          context: {
+            instruction: "只根据这些知识库资料回答，并在回答中注明资料标题；没有依据时明确说没有检索到。",
+            knowledge: data.knowledge,
+          },
+        });
+        setAnswer(result.reply);
+      } catch (error) {
+        setAnswer(
+          error instanceof Error
+            ? `AI 请求失败：${error.message}`
+            : "AI 请求失败，请稍后重试。",
+        );
+      } finally {
+        setQaLoading(false);
+      }
+      return;
+    }
     window.setTimeout(() => {
       const terms = question
         .replace(/[？?，。！!]/g, "")
@@ -177,33 +203,53 @@ export function KnowledgePage() {
         data.knowledge[0]?.summary ||
         "当前知识库还没有足够内容回答这个问题。";
       setAnswer(
-        `基于当前知识库，可以先从这里理解：${summary}\n\n可继续查看：${sources}。这是本地模拟检索，不代表真实模型生成的结论。`,
+        `当前未连接或未授权真实 AI。以下是本地关键词检索结果：\n\n${summary}\n\n可继续查看：${sources}。`,
       );
       setQaLoading(false);
     }, 650);
   };
 
   return (
-    <div className="page knowledge-page">
-      <PageHeader
-        eyebrow="个人知识"
-        title="知识库"
-        description="留下以后还会用到的判断、方法和来源。"
-        actions={
-          <>
+    <div className={`${embedded ? "embedded-page" : "page"} knowledge-page`}>
+      {!embedded ? (
+        <PageHeader
+          eyebrow="个人知识"
+          title="知识库"
+          description="留下以后还会用到的判断、方法和来源。"
+          actions={
+            <>
+              <Button
+                variant="secondary"
+                icon={Sparkles}
+                onClick={() => setQaOpen(true)}
+              >
+                知识问答
+              </Button>
+              <Button icon={Plus} onClick={() => openEditor()}>
+                添加资料
+              </Button>
+            </>
+          }
+        />
+      ) : null}
+      {embedded ? (
+        <div className="embedded-actions">
+          <span>知识问答与新增资料仍可直接使用</span>
+          <div>
             <Button
+              size="sm"
               variant="secondary"
               icon={Sparkles}
               onClick={() => setQaOpen(true)}
             >
               知识问答
             </Button>
-            <Button icon={Plus} onClick={() => openEditor()}>
+            <Button size="sm" icon={Plus} onClick={() => openEditor()}>
               添加资料
             </Button>
-          </>
-        }
-      />
+          </div>
+        </div>
+      ) : null}
 
       <div className="knowledge-search">
         <Search size={19} />
@@ -531,7 +577,13 @@ export function KnowledgePage() {
         }
       >
         <div className="qa-box">
-          <SimulatedTag />
+          {data.settings.aiEndpoint && data.settings.aiConsent ? (
+            <span className="ai-connection connected">
+              真实 AI 已配置
+            </span>
+          ) : (
+            <SimulatedTag label="本地检索 · 非 AI" />
+          )}
           <textarea
             rows={3}
             value={question}
@@ -556,7 +608,11 @@ export function KnowledgePage() {
           <div className="qa-answer">
             <div>
               <Sparkles size={17} />
-              <strong>模拟检索结果</strong>
+              <strong>
+                {data.settings.aiEndpoint && data.settings.aiConsent
+                  ? "真实 AI 回答"
+                  : "本地检索结果"}
+              </strong>
             </div>
             {answer.split("\n").map((line, index) => (
               <p key={index}>{line}</p>

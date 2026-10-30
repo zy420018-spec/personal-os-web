@@ -8,10 +8,9 @@ const base = "http://127.0.0.1:4173";
 const output = path.join(process.cwd(), "public", "review");
 const routes = [
   "dashboard",
-  "schedule",
+  "planning",
   "goals",
-  "inbox",
-  "knowledge",
+  "library",
   "growth",
   "assistant",
   "focus",
@@ -47,16 +46,16 @@ fs.mkdirSync(output, { recursive: true });
     });
   }
 
-  await page.goto(`${base}/#/schedule`, { waitUntil: "networkidle" });
-  await page.getByRole("button", { name: "新建日程" }).click();
+  await page.goto(`${base}/#/planning`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "添加时间块" }).click();
   await page.screenshot({
     path: path.join(output, "state-schedule-editor.png"),
     fullPage: false,
   });
   await page.getByRole("dialog").getByRole("button", { name: "关闭" }).click();
 
-  await page.goto(`${base}/#/inbox`, { waitUntil: "networkidle" });
-  await page.locator(".inbox-item").first().getByRole("button", { name: /整理/ }).click();
+  await page.goto(`${base}/#/library`, { waitUntil: "networkidle" });
+  await page.locator(".inbox-item").first().getByRole("button", { name: "整理", exact: true }).click();
   await page.screenshot({
     path: path.join(output, "state-inbox-conversion.png"),
     fullPage: false,
@@ -64,10 +63,8 @@ fs.mkdirSync(output, { recursive: true });
   await page.getByRole("dialog").getByRole("button", { name: "取消" }).click();
 
   await page.goto(`${base}/#/assistant`, { waitUntil: "networkidle" });
-  await page.getByRole("button", { name: "规划今天", exact: true }).click();
-  await page.waitForTimeout(900);
   await page.screenshot({
-    path: path.join(output, "state-assistant-reply.png"),
+    path: path.join(output, "state-assistant-unconfigured.png"),
     fullPage: false,
   });
 

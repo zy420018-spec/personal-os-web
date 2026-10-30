@@ -5,648 +5,294 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="PersonalOS 静态页面与交互审查包，包含十个页面、手机布局和关键交互状态。"
+      content="PersonalOS V2 静态功能审查包，包含真实页面截图、数据模型、AI 配置与完成状态。"
     />
-    <title>PersonalOS 静态审查包</title>
+    <title>PersonalOS V2 静态审查包</title>
     <style>
-      :root {
-        font-family: "Aptos", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-        color: #17201b;
-        background: #f3f1eb;
-        --ink: #17201b;
-        --muted: #6b756f;
-        --paper: #fffefa;
-        --line: #deddd6;
-        --green: #265f49;
-        --green-soft: #e4eee8;
-        --orange-soft: #f8e9dd;
-      }
-      * { box-sizing: border-box; }
-      html { scroll-behavior: smooth; }
-      body { margin: 0; background: #f3f1eb; }
-      a { color: var(--green); }
-      header {
-        padding: 48px 28px 42px;
-        color: #edf4ef;
-        background: #19241f;
-        border-bottom: 4px solid #d7b489;
-      }
-      header .inner, main { max-width: 1180px; margin: 0 auto; }
-      .eyebrow {
-        color: #a8c8b6;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: .13em;
-        text-transform: uppercase;
-      }
-      h1 { margin: 12px 0 10px; font-size: clamp(30px, 5vw, 52px); font-weight: 600; letter-spacing: -.035em; }
-      header p { max-width: 780px; margin: 0; color: #aabbb0; font-size: 15px; line-height: 1.7; }
-      .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
-      .meta span { padding: 6px 9px; color: #d8e4dc; font-size: 11px; background: #2d4137; border: 1px solid #40564a; border-radius: 4px; }
-      .top-links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
-      .top-links a {
-        display: inline-flex;
-        min-height: 38px;
-        align-items: center;
-        padding: 0 14px;
-        color: white;
-        font-size: 12px;
-        font-weight: 600;
-        text-decoration: none;
-        background: #265f49;
-        border: 1px solid #48765f;
-        border-radius: 5px;
-      }
-      main { padding: 28px 24px 80px; }
-      .notice {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 14px;
-        margin-bottom: 28px;
-      }
-      .notice article {
-        padding: 18px;
-        background: var(--paper);
-        border: 1px solid var(--line);
-        border-radius: 7px;
-      }
-      .notice h2 { margin: 0 0 7px; font-size: 15px; }
-      .notice p, .notice li { color: var(--muted); font-size: 12px; line-height: 1.7; }
-      .notice p { margin: 0; }
-      .notice ul { margin: 5px 0 0; padding-left: 19px; }
-      nav.toc {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-bottom: 28px;
-        padding: 12px;
-        background: #e9e7e0;
-        border: 1px solid #d9d7d0;
-        border-radius: 7px;
-      }
-      nav.toc a {
-        padding: 6px 9px;
-        color: #435149;
-        font-size: 11px;
-        text-decoration: none;
-        background: #fff;
-        border: 1px solid #dcdad3;
-        border-radius: 4px;
-      }
-      .page-section {
-        margin-top: 28px;
-        overflow: hidden;
-        background: var(--paper);
-        border: 1px solid var(--line);
-        border-radius: 8px;
-      }
-      .section-head {
-        display: grid;
-        grid-template-columns: 62px minmax(0, 1fr) auto;
-        align-items: start;
-        gap: 16px;
-        padding: 24px;
-        border-bottom: 1px solid var(--line);
-      }
-      .page-number {
-        display: grid;
-        width: 54px;
-        height: 54px;
-        place-items: center;
-        color: var(--green);
-        font-size: 16px;
-        font-weight: 700;
-        background: var(--green-soft);
-        border-radius: 7px;
-      }
-      .section-head h2 { margin: 0 0 6px; font-size: 24px; font-weight: 600; letter-spacing: -.02em; }
-      .section-head p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
-      .route { padding: 5px 8px; color: #69736d; font-family: Consolas, monospace; font-size: 10px; background: #f0efe9; border: 1px solid #dedcd5; border-radius: 3px; }
-      .section-body { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 24px; padding: 24px; }
-      .shots { min-width: 0; }
-      figure { margin: 0; }
-      figure + figure { margin-top: 18px; }
-      figure img { display: block; width: 100%; height: auto; border: 1px solid #d3d1ca; border-radius: 5px; background: #f5f4ef; }
-      figcaption { margin-top: 7px; color: var(--muted); font-size: 10px; }
-      .mobile-shot { width: min(100%, 390px); }
-      .details h3 { margin: 0 0 8px; font-size: 12px; }
-      .details h3:not(:first-child) { margin-top: 20px; }
-      .details ul { margin: 0; padding-left: 18px; }
-      .details li { margin: 5px 0; color: #55615a; font-size: 11px; line-height: 1.55; }
-      .tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 15px; }
-      .tags span { padding: 4px 6px; color: #526158; font-size: 9px; background: #edf1ee; border-radius: 3px; }
-      .tags .mock { color: #805d29; background: var(--orange-soft); }
-      .state-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 24px; }
-      .state-grid figure { margin: 0; }
-      .state-grid img { aspect-ratio: 4 / 3; object-fit: cover; object-position: center; }
-      .flow-note {
-        margin-top: 28px;
-        padding: 22px;
-        color: #35433b;
-        background: #e9f0eb;
-        border: 1px solid #d1ded6;
-        border-radius: 8px;
-      }
-      .flow-note h2 { margin: 0 0 7px; font-size: 18px; }
-      .flow-note p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
-      footer { padding: 28px; color: #8e9b93; font-size: 11px; text-align: center; background: #19241f; }
-      @media (max-width: 820px) {
-        .notice, .section-body, .state-grid { grid-template-columns: 1fr; }
-        .section-head { grid-template-columns: 50px minmax(0, 1fr); }
-        .section-head .route { grid-column: 2; justify-self: start; }
-        .page-number { width: 44px; height: 44px; }
-        .section-head, .section-body, .state-grid { padding: 16px; }
-        main { padding-right: 14px; padding-left: 14px; }
-      }
+      :root{font-family:"Aptos","Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:#17201b;background:#f3f1eb;--ink:#17201b;--muted:#69746e;--paper:#fffefa;--line:#deddd6;--green:#265f49;--soft:#e4eee8;--amber:#f8e9dd}
+      *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#f3f1eb}img{display:block;max-width:100%}a{color:var(--green)}
+      header{padding:48px 28px 42px;color:#edf4ef;background:#19241f;border-bottom:4px solid #d7b489}
+      header .inner,main{max-width:1180px;margin:0 auto}.eyebrow{color:#a8c8b6;font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase}
+      h1{margin:12px 0 10px;font-size:clamp(30px,5vw,52px);font-weight:600;letter-spacing:-.035em;line-height:1.1}
+      header p{max-width:820px;margin:0;color:#aabbb0;font-size:15px;line-height:1.7}
+      .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}.meta span{padding:6px 9px;color:#d8e4dc;font-size:11px;background:#2d4137;border:1px solid #40564a;border-radius:4px}
+      .links{display:flex;flex-wrap:wrap;gap:9px;margin-top:22px}.links a{display:inline-flex;min-height:38px;align-items:center;padding:0 14px;color:#fff;font-size:12px;font-weight:600;text-decoration:none;background:var(--green);border:1px solid #4d7963;border-radius:5px}
+      main{padding:28px 24px 80px}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+      .summary article{padding:16px;background:var(--paper);border:1px solid var(--line);border-radius:7px}.summary strong{display:block;font-size:24px}.summary span{color:var(--muted);font-size:11px}
+      .notice{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px}.notice article{padding:18px;background:var(--paper);border:1px solid var(--line);border-radius:7px}
+      .notice h2{margin:0 0 8px;font-size:15px}.notice ul{margin:0;padding-left:19px}.notice li{margin:5px 0;color:var(--muted);font-size:12px;line-height:1.6}
+      nav{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:24px;padding:12px;background:#e9e7e0;border:1px solid #d9d7d0;border-radius:7px}
+      nav a{padding:6px 9px;color:#435149;font-size:11px;text-decoration:none;background:#fff;border:1px solid #dcdad3;border-radius:4px}
+      section.card{margin-top:24px;overflow:hidden;background:var(--paper);border:1px solid var(--line);border-radius:8px}
+      .head{display:grid;grid-template-columns:58px minmax(0,1fr) auto;gap:15px;align-items:start;padding:22px;border-bottom:1px solid var(--line)}
+      .num{display:grid;width:50px;height:50px;place-items:center;color:var(--green);font-size:15px;font-weight:700;background:var(--soft);border-radius:7px}
+      .head h2{margin:0 0 5px;font-size:23px}.head p{margin:0;color:var(--muted);font-size:12px;line-height:1.6}.status{align-self:start;padding:5px 7px;color:var(--green);font-size:9px;font-weight:700;background:var(--soft);border-radius:3px}
+      .status.pending{color:#8a672d;background:var(--amber)}.body{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:22px;padding:22px}
+      figure{margin:0}p.note{color:var(--muted);font-size:10px;line-height:1.6}.shot{width:100%;border:1px solid #d5d3cc;border-radius:5px}
+      .mobile{width:min(100%,390px)}.detail h3{margin:0 0 7px;font-size:12px}.detail h3:not(:first-child){margin-top:18px}.detail ul{margin:0;padding-left:18px}
+      .detail li{margin:5px 0;color:#55615a;font-size:11px;line-height:1.55}.tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:14px}
+      .tags span{padding:4px 6px;color:#526158;font-size:9px;background:#edf1ee;border-radius:3px}.tags .pending{color:#805d29;background:var(--amber)}
+      .flow{margin-top:24px;padding:21px;color:#35433b;background:#e9f0eb;border:1px solid #d1ded6;border-radius:8px}.flow h2{margin:0 0 7px;font-size:18px}.flow p{margin:0;color:var(--muted);font-size:12px;line-height:1.7}
+      footer{padding:28px;color:#8e9b93;font-size:11px;text-align:center;background:#19241f}
+      @media(max-width:850px){.summary{grid-template-columns:1fr 1fr}.notice,.body{grid-template-columns:1fr}.head{grid-template-columns:50px minmax(0,1fr)}.head .status{grid-column:2;justify-self:start}.num{width:44px;height:44px}main{padding:18px 14px 60px}}
     </style>
   </head>
   <body>
     <header>
       <div class="inner">
-        <span class="eyebrow">Static Product Review · No JavaScript Required</span>
-        <h1>PersonalOS 静态审查包</h1>
+        <span class="eyebrow">PersonalOS V2 · Static Product Review</span>
+        <h1>PersonalOS V2 静态审查包</h1>
         <p>
-          本页直接提供当前版本的真实页面截图、页面职责、主要操作控件与数据联动说明。
-          所有文字和图片均存在于静态 HTML 中，不依赖前端 JavaScript，适合外部分析工具直接读取。
+          本页无需 JavaScript 即可读取。它记录 V2 的真实页面、已完成能力、外部配置边界和当前限制，
+          避免把尚未部署的 AI 服务或云端文件能力描述成已经上线。
         </p>
         <div class="meta">
-          <span>10 个产品页面</span>
-          <span>桌面 1440px</span>
-          <span>手机 390px</span>
-          <span>23 张真实截图</span>
-          <span>本地优先数据</span>
-          <span>模拟 AI 已明确标注</span>
+          <span>V2 数据迁移</span><span>课程表与临时变动</span><span>首页执行</span>
+          <span>IndexedDB 文件成果</span><span>统一信息库</span><span>复盘导出</span>
+          <span>真实 AI 服务代码就绪</span><span>AI 密钥待配置</span>
         </div>
-        <div class="top-links">
-          <a href="../#/dashboard">打开交互式 PersonalOS</a>
-          <a href="https://github.com/zy420018-spec/personal-os-web">查看 GitHub 源码</a>
+        <div class="links">
+          <a href="../#/dashboard">打开 V2 交互版</a>
+          <a href="https://github.com/zy420018-spec/personal-os-web">GitHub 源码</a>
         </div>
       </div>
     </header>
-
     <main>
+      <section class="summary">
+        <article><strong>8</strong><span>主要导航入口</span></article>
+        <article><strong>3</strong><span>兼容旧入口路由</span></article>
+        <article><strong>7/7</strong><span>V2 自动化测试通过</span></article>
+        <article><strong>待配置</strong><span>真实 AI 密钥与服务地址</span></article>
+      </section>
+
       <section class="notice">
         <article>
-          <h2>真实性说明</h2>
+          <h2>已经真实可用</h2>
           <ul>
-            <li>目标、项目、任务、日程、收集箱、知识库、专注、复盘、通知和成长记录均可创建、编辑或删除。</li>
-            <li>数据使用浏览器 localStorage 持久化，刷新后保留。</li>
-            <li>任务状态、日程、专注成果和执行历史之间使用同一份共享数据。</li>
-            <li>完成任务时必须留下文字成果，或者在专注结束时填写实际完成内容。</li>
+            <li>首页开始、暂停、刷新恢复、结束专注，并同步任务状态。</li>
+            <li>文字、网页链接、图片和文件成果；图片预览、文件下载使用 IndexedDB。</li>
+            <li>固定课程、上课周次、调课、停课和临时活动独立保存。</li>
+            <li>排程会检查课程、日程、截止时间、耗时、优先级和历史执行比例。</li>
+            <li>信息库统一收集与知识入口，转化后保存真实对象 ID。</li>
+            <li>每日、每周、每月复盘与 Markdown、CSV、打印/PDF 导出。</li>
           </ul>
         </article>
         <article>
-          <h2>模拟能力边界</h2>
+          <h2>需要外部配置或仍有限制</h2>
           <ul>
-            <li>AI 对话、收集箱分类建议、项目分析、知识问答和跟进建议均为本地规则生成。</li>
-            <li>页面中所有模拟内容带有“模拟 AI”或“规则生成”标记。</li>
-            <li>当前未接入真实大模型、账号登录、云端数据库或系统推送。</li>
-            <li>公开网站使用独立浏览器存储，不包含开发者本地测试数据。</li>
+            <li>真实 AI 前端与服务端代理代码已存在，但公开 GitHub Pages 无法运行服务端。</li>
+            <li>需要部署 Vercel AI 代理并设置服务端 OPENAI_API_KEY，不能把密钥放进前端。</li>
+            <li>文件当前只存于单浏览器 IndexedDB，不会跨设备同步。</li>
+            <li>未配置 AI 时，对话发送和 AI 整理保持禁用，不会生成固定回复冒充 AI。</li>
+            <li>JSON 备份包含结构化数据，不包含 IndexedDB 文件二进制。</li>
           </ul>
         </article>
       </section>
 
-      <nav class="toc" aria-label="页面目录">
-        <a href="#dashboard">首页</a>
-        <a href="#schedule">日程</a>
-        <a href="#goals">目标与项目</a>
-        <a href="#inbox">收集箱</a>
-        <a href="#knowledge">知识库</a>
-        <a href="#growth">成长档案</a>
-        <a href="#assistant">AI 助理</a>
-        <a href="#focus">执行</a>
-        <a href="#review">复盘</a>
-        <a href="#notifications">通知</a>
-        <a href="#states">关键交互状态</a>
+      <nav>
+        <a href="#execution">首页执行</a><a href="#planning">规划与课程</a><a href="#library">信息库</a>
+        <a href="#evidence">成果文件</a><a href="#review">复盘导出</a><a href="#ai">真实 AI</a><a href="#mobile">手机端</a>
       </nav>
 
-      <section class="page-section" id="dashboard">
-        <div class="section-head">
-          <span class="page-number">01</span>
-          <div>
-            <h2>首页 · 个人指挥中心</h2>
-            <p>集中显示未完成任务、当天时间轴、当天进度和本周整体推进情况。</p>
-          </div>
-          <code class="route">#/dashboard</code>
+      <section class="card" id="execution">
+        <div class="head">
+          <span class="num">01</span>
+          <div><h2>首页 · 执行控制台</h2><p>不需要进入独立执行页即可开始、暂停和结束任务。</p></div>
+          <span class="status">已真实实现</span>
         </div>
-        <div class="section-body">
-          <div class="shots">
-            <figure>
-              <img src="./desktop-dashboard.png" alt="PersonalOS 桌面端首页，展示我的事情、今日计划、今日进度和本周整体推进四个核心区域" />
-              <figcaption>桌面端：四块核心区域，不使用大型 AI 卡片或复杂图表。</figcaption>
-            </figure>
-            <figure class="mobile-shot">
-              <img src="./mobile-dashboard.png" alt="PersonalOS 手机端首页，顶部操作区、任务列表和时间日程纵向排列，并显示五项底部导航" />
-              <figcaption>手机端：单列任务和日程，底部固定五项导航。</figcaption>
-            </figure>
+        <div class="body">
+          <div>
+            <img class="shot" src="./desktop-dashboard.png" alt="PersonalOS V2 首页执行控制台、接下来任务、今日完成和原有优先任务区域" />
+            <p class="note">桌面首页：当前执行、接下来任务、今日完成、今日计划与进度联动。</p>
           </div>
-          <div class="details">
-            <h3>页面内容</h3>
+          <div class="detail">
+            <h3>真实业务</h3>
             <ul>
-              <li>我的事情：按截止日期和优先级排列开放任务。</li>
-              <li>今日计划：显示时间、任务、预计时长和状态。</li>
-              <li>今日进度：完成数、待处理数和实际专注分钟数。</li>
-              <li>本周推进：本周完成数、开放数和简单进度条。</li>
+              <li>正计时和暂停状态写入共享 FocusSession。</li>
+              <li>刷新后从时间戳与暂停累计恢复，不依赖后台倒计时。</li>
+              <li>结束成果写入 Evidence，并更新任务 completedAt 和状态。</li>
+              <li>部分完成必须填写剩余工作。</li>
+              <li>完整执行页仍保留在旧路由 #/focus。</li>
             </ul>
-            <h3>主要按钮与行为</h3>
-            <ul>
-              <li>新任务：打开任务创建表单。</li>
-              <li>查看日程：跳转日程页。</li>
-              <li>开始专注：进入执行页。</li>
-              <li>任务行：打开同一任务对象的编辑表单。</li>
-            </ul>
-            <div class="tags"><span>真实增删改</span><span>共享任务数据</span><span>本地保存</span><span class="mock">AI 建议为模拟</span></div>
+            <div class="tags"><span>真实计时</span><span>成果关联</span><span>首页直达</span><span>状态同步</span></div>
           </div>
         </div>
       </section>
 
-      <section class="page-section" id="schedule">
-        <div class="section-head">
-          <span class="page-number">02</span>
-          <div>
-            <h2>日程 · 时间规划中心</h2>
-            <p>为任务安排具体时间块，支持日、周、月视图，计划时间和实际执行时间分开保存。</p>
-          </div>
-          <code class="route">#/schedule</code>
+      <section class="card" id="planning">
+        <div class="head">
+          <span class="num">02</span>
+          <div><h2>规划 · 日程、课程与智能排程</h2><p>日程不再是独立一级入口；旧 #/schedule 仍然兼容。</p></div>
+          <span class="status">已真实实现</span>
         </div>
-        <div class="section-body">
-          <div class="shots">
-            <figure>
-              <img src="./desktop-schedule.png" alt="PersonalOS 桌面端日程页，包含日期切换、日周月分段控件、时间轴日程和右侧规划建议" />
-              <figcaption>桌面端：日历主区域与规划侧栏并列。</figcaption>
-            </figure>
-            <figure class="mobile-shot">
-              <img src="./mobile-schedule.png" alt="PersonalOS 手机端日程页，日期切换、日周月切换和纵向时间轴在单列中显示" />
-              <figcaption>手机端：时间轴保持纵向，侧栏内容移动到页面下方。</figcaption>
-            </figure>
+        <div class="body">
+          <div>
+            <img class="shot" src="./desktop-courses.png" alt="PersonalOS V2 周课程表、固定课程、课程专注属性、临时活动和当天安排" />
+            <p class="note">周课程表与当天课程，固定课程和临时变动分开存储。</p>
+            <img class="shot" style="margin-top:14px" src="./state-planner.png" alt="PersonalOS V2 智能排程弹窗，依据精力、课程、空闲时间和任务给出候选安排" />
+            <p class="note">排程候选显示理由；用户勾选并确认后才写入正式日程。</p>
           </div>
-          <div class="details">
-            <h3>主要控件</h3>
+          <div class="detail">
+            <h3>课程模型</h3>
             <ul>
-              <li>前后日期、今天和日/周/月视图切换。</li>
-              <li>新建日程、时间段添加入口和待安排任务入口。</li>
-              <li>日程卡片支持编辑和删除，删除前确认。</li>
-              <li>关联任务后仍保留原任务唯一标识。</li>
+              <li>课程名称、星期、周次、地点、教师和备注。</li>
+              <li>必须专心、轻度空闲、相对空闲三种课堂属性。</li>
+              <li>停课、调课、临时活动使用 CourseChange，不覆盖原课程。</li>
             </ul>
-            <h3>规划建议</h3>
+            <h3>排程输入</h3>
             <ul>
-              <li>根据当天时间块数量和开放任务生成建议。</li>
-              <li>建议不会自动修改正式日程。</li>
+              <li>课程与临时变动、已有日程、任务截止日和预计耗时。</li>
+              <li>优先级、用户精力、历史实际专注比例。</li>
+              <li>必须专心的课程会被硬冲突排除。</li>
+              <li>时间不足时会列出无法安排的任务，而不是强行塞入。</li>
             </ul>
-            <div class="tags"><span>真实 CRUD</span><span>日/周/月</span><span>计划时间独立</span><span class="mock">规划建议为本地规则</span></div>
+            <div class="tags"><span>固定课程</span><span>临时调课</span><span>停课</span><span>活动</span><span>真实空闲计算</span><span>用户确认</span></div>
           </div>
         </div>
       </section>
 
-      <section class="page-section" id="goals">
-        <div class="section-head">
-          <span class="page-number">03</span>
-          <div>
-            <h2>目标与项目 · 行动结构中心</h2>
-            <p>按“目标 → 项目 → 任务”组织行动，同时允许独立任务存在。</p>
-          </div>
-          <code class="route">#/goals</code>
+      <section class="card" id="library">
+        <div class="head">
+          <span class="num">03</span>
+          <div><h2>信息库 · 收集与知识统一入口</h2><p>收集箱与知识库合并入口，但保留两套数据模型。</p></div>
+          <span class="status">已真实实现</span>
         </div>
-        <div class="section-body">
-          <div class="shots">
-            <figure>
-              <img src="./desktop-goals.png" alt="PersonalOS 桌面端目标与项目页，三栏分别展示目标卡片、项目列表和选中项目详情与任务清单" />
-              <figcaption>桌面端：目标、项目、项目详情三栏布局。</figcaption>
-            </figure>
-            <figure class="mobile-shot">
-              <img src="./mobile-goals.png" alt="PersonalOS 手机端目标与项目页，目标、项目和详情改为纵向排列" />
-              <figcaption>手机端：三块信息按操作顺序纵向排列。</figcaption>
-            </figure>
+        <div class="body">
+          <div>
+            <img class="shot" src="./desktop-library.png" alt="PersonalOS V2 信息库中的快速收集、待整理列表与知识库入口" />
+            <p class="note">快速收集与知识库使用分段入口，旧 #/inbox 与 #/knowledge 路由仍兼容。</p>
           </div>
-          <div class="details">
-            <h3>目标</h3>
+          <div class="detail">
+            <h3>真实能力</h3>
             <ul>
-              <li>创建、编辑、删除目标。</li>
-              <li>记录预期成果、可选期限和补充说明。</li>
-              <li>查看关联项目数和任务数。</li>
+              <li>文字与链接收集、分类建议、搜索、筛选、归档和编辑。</li>
+              <li>可转换为目标、项目、任务或知识资料。</li>
+              <li>转换结果保存 convertedToId，不再只保存分类字符串。</li>
+              <li>配置真实 AI 后可调用 AI 整理，返回建议类型并要求确认。</li>
+              <li>未配置时仅使用本地规则，并明确标记“非 AI”。</li>
             </ul>
-            <h3>项目与任务</h3>
-            <ul>
-              <li>项目支持简单模式和完整模式。</li>
-              <li>完整模式增加背景与风险字段。</li>
-              <li>项目内可创建、编辑和删除任务。</li>
-              <li>任务支持待开始、进行中、部分完成、已完成、已放弃。</li>
-            </ul>
-            <div class="tags"><span>真实 CRUD</span><span>目标项目任务联动</span><span>独立任务</span><span>服务端迁移友好</span></div>
+            <div class="tags"><span>统一入口</span><span>独立数据模型</span><span>真实对象 ID</span><span class="pending">AI 整理待服务配置</span></div>
           </div>
         </div>
       </section>
 
-      <section class="page-section" id="inbox">
-        <div class="section-head">
-          <span class="page-number">04</span>
-          <div>
-            <h2>收集箱 · 快速记录入口</h2>
-            <p>先保存未经整理的想法、临时事项和资料，再决定归档或转换。</p>
-          </div>
-          <code class="route">#/inbox</code>
+      <section class="card" id="evidence">
+        <div class="head">
+          <span class="num">04</span>
+          <div><h2>成果证明 · 多种材料</h2><p>文字、链接、图片和文件与任务、项目、专注记录关联。</p></div>
+          <span class="status">已真实实现</span>
         </div>
-        <div class="section-body">
-          <div class="shots">
-            <figure>
-              <img src="./desktop-inbox.png" alt="PersonalOS 桌面端收集箱页，包含顶部快速输入、状态筛选、分类筛选和待整理内容列表" />
-              <figcaption>桌面端：快速输入与待整理列表。</figcaption>
-            </figure>
-            <figure class="mobile-shot">
-              <img src="./mobile-inbox.png" alt="PersonalOS 手机端收集箱页，快速输入和纵向卡片列表适应窄屏" />
-              <figcaption>手机端：保留快速记录入口和内容卡片。</figcaption>
-            </figure>
+        <div class="body">
+          <div>
+            <img class="shot" src="./desktop-focus.png" alt="PersonalOS V2 执行详情页，保留专注计时、历史执行和成果入口" />
+            <p class="note">完整执行页仍保留；每项任务可追加多条成果。</p>
           </div>
-          <div class="details">
-            <h3>主要控件</h3>
+          <div class="detail">
+            <h3>文件方案与限制</h3>
             <ul>
-              <li>输入内容并保存到收集箱。</li>
-              <li>按全部、待整理、已归档筛选。</li>
-              <li>按想法、任务、项目、目标、知识类型筛选。</li>
-              <li>调整分类、归档、恢复和删除。</li>
+              <li>图片和文件保存在浏览器 IndexedDB 的 personal-os-files。</li>
+              <li>图片生成真实 Blob URL 预览，文件可下载。</li>
+              <li>单个文件限制 25 MB。</li>
+              <li>元数据保存在 Evidence，项目中可通过任务追溯。</li>
+              <li>GitHub Pages 不提供安全云文件上传；跨设备文件存储仍需 Supabase Storage 或对象存储。</li>
             </ul>
-            <h3>转换操作</h3>
-            <ul>
-              <li>确认后可转换为任务、项目、目标或知识资料。</li>
-              <li>原始收集内容保留，转换后自动归档。</li>
-              <li>转换目标、标题、日期和预计耗时可编辑。</li>
-            </ul>
-            <div class="tags"><span>真实保存</span><span>用户确认后转换</span><span>原内容保留</span><span class="mock">分类建议为本地规则</span></div>
+            <div class="tags"><span>文字</span><span>链接</span><span>图片</span><span>文件</span><span>多成果</span><span>真实预览下载</span></div>
           </div>
         </div>
       </section>
 
-      <section class="page-section" id="knowledge">
-        <div class="section-head">
-          <span class="page-number">05</span>
-          <div>
-            <h2>知识库 · 个人知识沉淀中心</h2>
-            <p>保存文章、笔记、书籍、视频和链接，通过分类、标签、搜索和关联项目再次使用。</p>
-          </div>
-          <code class="route">#/knowledge</code>
+      <section class="card" id="review">
+        <div class="head">
+          <span class="num">05</span>
+          <div><h2>复盘 · 周期统计与导出</h2><p>每日、每周、每月使用不同分析内容和真实周期边界。</p></div>
+          <span class="status">已真实实现</span>
         </div>
-        <div class="section-body">
-          <div class="shots">
-            <figure>
-              <img src="./desktop-knowledge.png" alt="PersonalOS 桌面端知识库页，包含搜索框、分类与标签筛选、资料列表和完整资料详情" />
-              <figcaption>桌面端：筛选、资料列表与详情三栏联动。</figcaption>
-            </figure>
-            <figure class="mobile-shot">
-              <img src="./mobile-knowledge.png" alt="PersonalOS 手机端知识库页，搜索、横向筛选和资料列表纵向排列" />
-              <figcaption>手机端：筛选变为横向区域，列表与详情纵排。</figcaption>
-            </figure>
+        <div class="body">
+          <div>
+            <img class="shot" src="./desktop-review.png" alt="PersonalOS V2 复盘页，周期选择、真实统计、不同复盘问题、导出和 AI 分析入口" />
+            <p class="note">复盘按日期选择周期，支持 Markdown、CSV 与浏览器打印/PDF。</p>
           </div>
-          <div class="details">
-            <h3>主要控件</h3>
+          <div class="detail">
+            <h3>统计与导出</h3>
             <ul>
-              <li>按标题、正文和标签搜索。</li>
-              <li>分类、资料类型和标签筛选。</li>
-              <li>添加、编辑和删除知识资料。</li>
-              <li>资料详情显示来源、原文链接和关联项目。</li>
-              <li>知识问答入口使用本地资料检索给出模拟回答。</li>
+              <li>任务按截止、完成、日程和专注记录归入周期。</li>
+              <li>计划分钟来自任务预估，实际分钟来自真实 FocusSession。</li>
+              <li>每日/每周/每月显示不同项目、成长和问题视角。</li>
+              <li>Markdown 与 CSV 为真实文件下载。</li>
+              <li>PDF 通过独立打印视图生成，可选择浏览器“保存为 PDF”。</li>
+              <li>真实 AI 分析仅在服务配置和上下文授权后可用。</li>
             </ul>
-            <h3>数据字段</h3>
-            <ul>
-              <li>标题、摘要、正文、来源、链接、分类、类型、标签和项目关联。</li>
-            </ul>
-            <div class="tags"><span>真实 CRUD</span><span>关键词搜索</span><span>来源与关联项目</span><span class="mock">知识问答为模拟检索</span></div>
+            <div class="tags"><span>每日</span><span>每周</span><span>每月</span><span>Markdown</span><span>CSV</span><span>PDF 打印</span></div>
           </div>
         </div>
       </section>
 
-      <section class="page-section" id="growth">
-        <div class="section-head">
-          <span class="page-number">06</span>
-          <div>
-            <h2>成长档案 · 个人发展记录</h2>
-            <p>记录能力变化、实践经历和重要里程碑，并从长期记录中观察重复出现的能力。</p>
-          </div>
-          <code class="route">#/growth</code>
+      <section class="card" id="ai">
+        <div class="head">
+          <span class="num">06</span>
+          <div><h2>真实 AI · 服务端代理</h2><p>代码已经区分“已配置真实 AI”和“本地非 AI 检索”。</p></div>
+          <span class="status pending">代码就绪 · 服务待配置</span>
         </div>
-        <div class="section-body">
-          <div class="shots">
-            <figure>
-              <img src="./desktop-growth.png" alt="PersonalOS 桌面端成长档案页，包含能力总览、能力地图、模拟 AI 观察和最近成长轨迹" />
-              <figcaption>桌面端：能力总览、能力地图和成长轨迹。</figcaption>
-            </figure>
-            <figure class="mobile-shot">
-              <img src="./mobile-growth.png" alt="PersonalOS 手机端成长档案页，能力数据、能力列表和成长记录改为单列" />
-              <figcaption>手机端：能力数据和成长记录单列呈现。</figcaption>
-            </figure>
+        <div class="body">
+          <div>
+            <img class="shot" src="./desktop-assistant.png" alt="PersonalOS V2 AI 助理页，未配置时明确显示真实 AI 尚未配置和发送禁用状态" />
+            <p class="note">公开 GitHub Pages 没有服务端，因此当前页面不会生成伪 AI 回复。</p>
+            <img class="shot" style="margin-top:14px" src="./state-assistant-unconfigured.png" alt="真实 AI 未配置提示、上下文授权说明和重试机制" />
           </div>
-          <div class="details">
-            <h3>主要控件</h3>
+          <div class="detail">
+            <h3>已经实现的接入代码</h3>
             <ul>
-              <li>总览、能力发展、实践经历和成长轨迹切换。</li>
-              <li>添加能力、实践或里程碑记录。</li>
-              <li>记录具体变化、日期和能力标签。</li>
-              <li>查看记录详情、删除记录。</li>
+              <li>api/ai.ts 服务端代理，密钥只读取服务端环境变量。</li>
+              <li>ALLOWED_ORIGINS 限制允许来源。</li>
+              <li>前端支持加载、超时、错误和重试。</li>
+              <li>顾问、协作、主动模式使用不同系统指令。</li>
+              <li>上下文授权后可发送目标、项目、任务、课程、日程、执行、成果、信息库、复盘和成长数据。</li>
+              <li>AI 创建任务建议需要用户确认。</li>
             </ul>
-            <h3>观察与隐私</h3>
+            <h3>上线前需要</h3>
             <ul>
-              <li>能力地图根据标签出现次数计算。</li>
-              <li>模拟观察不会自动写入档案。</li>
-              <li>所有成长记录由用户主动创建和维护。</li>
+              <li>将 api/ai.ts 部署到 Vercel 或其他 Serverless 平台。</li>
+              <li>配置 OPENAI_API_KEY、OPENAI_MODEL 和 ALLOWED_ORIGINS。</li>
+              <li>在 PersonalOS 个人设置中填写代理地址并授权上下文。</li>
             </ul>
-            <div class="tags"><span>真实记录 CRUD</span><span>能力标签聚合</span><span>用户主动写入</span><span class="mock">AI 观察为规则生成</span></div>
+            <div class="tags"><span>服务端密钥</span><span>来源限制</span><span>真实失败处理</span><span>模式差异</span><span class="pending">API Key 待配置</span></div>
           </div>
         </div>
       </section>
 
-      <section class="page-section" id="assistant">
-        <div class="section-head">
-          <span class="page-number">07</span>
-          <div>
-            <h2>AI 助理 · 智能协作中心</h2>
-            <p>读取当前工作台数据，围绕规划、项目、收集箱和复盘进行模拟对话。</p>
-          </div>
-          <code class="route">#/assistant</code>
+      <section class="card" id="mobile">
+        <div class="head">
+          <span class="num">07</span>
+          <div><h2>手机端 · 核心入口重排</h2><p>首页可直接执行，规划与信息库进入底部主导航。</p></div>
+          <span class="status">已真实实现</span>
         </div>
-        <div class="section-body">
-          <div class="shots">
-            <figure>
-              <img src="./desktop-assistant.png" alt="PersonalOS 桌面端 AI 助理页，包含历史对话、顾问协作主动三种模式、聊天区、快捷操作和右侧工作台上下文" />
-              <figcaption>桌面端：历史、对话和上下文三栏。</figcaption>
-            </figure>
-            <figure class="mobile-shot">
-              <img src="./mobile-assistant.png" alt="PersonalOS 手机端 AI 助理页，模式切换、对话、快捷操作和输入框纵向排列" />
-              <figcaption>手机端：聚焦当前对话和快捷操作。</figcaption>
-            </figure>
+        <div class="body">
+          <div>
+            <img class="shot mobile" src="./mobile-dashboard.png" alt="PersonalOS V2 手机首页的执行控制台、任务列表和今日计划" />
+            <p class="note">手机首页优先保留执行、任务与今日计划。</p>
           </div>
-          <div class="details">
-            <h3>主要控件</h3>
+          <div class="detail">
+            <h3>移动端导航</h3>
             <ul>
-              <li>新建对话和历史对话切换。</li>
-              <li>顾问、协作、主动三种模拟模式。</li>
-              <li>规划今天、分析项目、整理想法、每日复盘四个快捷动作。</li>
-              <li>发送消息、继续拆解、检查风险。</li>
-              <li>建议创建任务时打开确认弹窗，确认后才写入。</li>
+              <li>底栏：首页、规划、信息库、AI 助理、更多。</li>
+              <li>完整执行页可从首页和“更多”进入。</li>
+              <li>课程表在窄屏中保持横向周视图，页面本身不产生横向溢出。</li>
+              <li>弹窗改为底部面板，表单与导出控件自动换行。</li>
             </ul>
-            <h3>权限边界</h3>
-            <ul>
-              <li>回复基于本地任务、项目、收集箱、知识和执行数据生成。</li>
-              <li>不会调用真实模型，也不会自动修改正式计划。</li>
-              <li>确认后的 AI 操作会写入操作日志。</li>
-            </ul>
-            <div class="tags"><span>对话持久化</span><span>用户确认后写入</span><span>上下文统计真实</span><span class="mock">全部 AI 回复为模拟</span></div>
+            <div class="tags"><span>390px 验证</span><span>无页面横向溢出</span><span>移动底栏</span><span>执行直达</span></div>
           </div>
         </div>
       </section>
 
-      <section class="page-section" id="focus">
-        <div class="section-head">
-          <span class="page-number">08</span>
-          <div>
-            <h2>执行 · 专注与行动中心</h2>
-            <p>从开放任务开始正计时专注，支持暂停、离开冷静期、结束反馈和成果记录。</p>
-          </div>
-          <code class="route">#/focus</code>
-        </div>
-        <div class="section-body">
-          <div class="shots">
-            <figure>
-              <img src="./desktop-focus.png" alt="PersonalOS 桌面端执行页，包含专注任务选择、今日等待执行列表和历史执行记录" />
-              <figcaption>桌面端：专注入口、等待执行和历史记录。</figcaption>
-            </figure>
-            <figure class="mobile-shot">
-              <img src="./mobile-focus.png" alt="PersonalOS 手机端执行页，任务选择、专注操作和历史记录纵向排列" />
-              <figcaption>手机端：任务选择与专注入口优先显示。</figcaption>
-            </figure>
-          </div>
-          <div class="details">
-            <h3>真实计时流程</h3>
-            <ul>
-              <li>选择任务后启动正计时，每秒钟更新。</li>
-              <li>暂停后停止累计，刷新页面仍保持暂停状态。</li>
-              <li>暂时离开提供 30 秒冷静倒计时和原因记录。</li>
-              <li>结束后填写实际完成内容、任务状态和阻碍。</li>
-            </ul>
-            <h3>成果与状态联动</h3>
-            <ul>
-              <li>结束记录保存实际投入时间。</li>
-              <li>填写的结果自动生成证据记录。</li>
-              <li>任务状态同步到首页、项目详情和复盘数据。</li>
-              <li>执行历史显示任务、实际时长、状态和成果摘要。</li>
-            </ul>
-            <div class="tags"><span>真实正计时</span><span>刷新后恢复</span><span>成果证据</span><span>任务状态同步</span></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="page-section" id="review">
-        <div class="section-head">
-          <span class="page-number">09</span>
-          <div>
-            <h2>复盘 · 持续优化中心</h2>
-            <p>从任务、日程、专注和成果材料中自动汇总一段时间的真实行动数据。</p>
-          </div>
-          <code class="route">#/review</code>
-        </div>
-        <div class="section-body">
-          <div class="shots">
-            <figure>
-              <img src="./desktop-review.png" alt="PersonalOS 桌面端复盘页，包含每日每周每月切换、自动数据汇总、三个复盘问题和历史记录" />
-              <figcaption>桌面端：自动汇总、复盘问题和历史记录。</figcaption>
-            </figure>
-            <figure class="mobile-shot">
-              <img src="./mobile-review.png" alt="PersonalOS 手机端复盘页，自动汇总、复盘输入框和侧栏记录纵向排列" />
-              <figcaption>手机端：缩短单次复盘所需滚动距离。</figcaption>
-            </figure>
-          </div>
-          <div class="details">
-            <h3>复盘流程</h3>
-            <ul>
-              <li>每日、每周、每月三个周期切换。</li>
-              <li>自动计算任务数、完成数、计划分钟和实际专注分钟。</li>
-              <li>填写重要结果、计划偏差和下一次调整。</li>
-              <li>保存当时的任务状态和行动数据为历史记录。</li>
-            </ul>
-            <h3>观察</h3>
-            <ul>
-              <li>比较计划与实际投入差异。</li>
-              <li>显示成果材料数量和开放任务数量。</li>
-              <li>模拟建议不会自动修改正式计划。</li>
-            </ul>
-            <div class="tags"><span>真实自动汇总</span><span>历史复盘保存</span><span>执行数据联动</span><span class="mock">观察建议为本地规则</span></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="page-section" id="notifications">
-        <div class="section-head">
-          <span class="page-number">10</span>
-          <div>
-            <h2>通知 · 动态跟进中心</h2>
-            <p>把任务提醒、项目跟进和 AI 建议分开显示，避免无关信息持续堆积。</p>
-          </div>
-          <code class="route">#/notifications</code>
-        </div>
-        <div class="section-body">
-          <div class="shots">
-            <figure>
-              <img src="./desktop-notifications.png" alt="PersonalOS 桌面端通知页，包含未读概览、任务提醒、项目跟进、AI 建议和跟进侧栏" />
-              <figcaption>桌面端：通知列表与分类跟进侧栏。</figcaption>
-            </figure>
-            <figure class="mobile-shot">
-              <img src="./mobile-notifications.png" alt="PersonalOS 手机端通知页，通知概览与分类卡片纵向排列" />
-              <figcaption>手机端：通知列表优先，分类说明位于后方。</figcaption>
-            </figure>
-          </div>
-          <div class="details">
-            <h3>主要控件</h3>
-            <ul>
-              <li>全部、任务提醒、项目跟进、AI 建议筛选。</li>
-              <li>单条标记已读和全部已读。</li>
-              <li>打开通知详情并跳转到关联事项。</li>
-              <li>根据项目跟进建议创建一个更小的关联行动。</li>
-            </ul>
-            <h3>边界</h3>
-            <ul>
-              <li>当前仅提供站内通知，不包含系统推送。</li>
-              <li>跟进建议关联已有项目，不重复创建原任务。</li>
-              <li>创建行动前需要用户确认。</li>
-            </ul>
-            <div class="tags"><span>真实已读状态</span><span>分类筛选</span><span>确认后创建行动</span><span class="mock">跟进建议为模拟</span></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="page-section" id="states">
-        <div class="section-head">
-          <span class="page-number">↗</span>
-          <div>
-            <h2>关键交互状态</h2>
-            <p>补充展示表单、确认流程和对话结果，便于检查控件层级、弹层与反馈方式。</p>
-          </div>
-          <code class="route">UI STATES</code>
-        </div>
-        <div class="state-grid">
-          <figure>
-            <img src="./state-schedule-editor.png" alt="新建日程弹窗，包含日程名称、关联任务、日期、开始结束时间、备注、取消和创建按钮" />
-            <figcaption>新建日程：表单校验与关联任务。</figcaption>
-          </figure>
-          <figure>
-            <img src="./state-inbox-conversion.png" alt="收集箱转换弹窗，提供想法、任务、项目、目标和知识类型，以及标题、说明、日期和预计耗时" />
-            <figcaption>收集箱整理：用户确认后转换。</figcaption>
-          </figure>
-          <figure>
-            <img src="./state-assistant-reply.png" alt="AI 助理对话状态，显示模拟 AI 回复、创建任务、进一步拆解和检查风险按钮" />
-            <figcaption>AI 对话：建议操作不自动执行。</figcaption>
-          </figure>
-        </div>
-      </section>
-
-      <section class="flow-note">
-        <h2>核心业务流</h2>
+      <section class="flow">
+        <h2>V2 数据与安全说明</h2>
         <p>
-          想法收集 → 目标/项目 → 任务 → 日程 → 专注执行 → 成果记录 → 复盘 → 知识沉淀与成长档案。
-          所有页面共享同一套浏览器本地数据；重要修改和删除均需要用户操作或确认。
+          结构化数据仍在 localStorage，但 V2 版本迁移会先创建时间戳备份；图片和文件进入 IndexedDB。
+          所有页面共享同一任务、课程、日程、执行和成果对象。真实 AI 密钥不在前端、构建产物或 GitHub 仓库中；
+          没有服务端配置时明确显示待配置，而不是回退到固定文案冒充模型。
         </p>
       </section>
     </main>
-
-    <footer>
-      PersonalOS 静态审查包 · 页面正文、截图和说明无需 JavaScript 即可读取。
-    </footer>
+    <footer>PersonalOS V2 静态审查包 · 文字与图片无需 JavaScript 即可读取</footer>
   </body>
 </html>

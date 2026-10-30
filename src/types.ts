@@ -38,6 +38,8 @@ export interface Task {
   priority: Priority;
   deadline?: string;
   estimate: number;
+  completedAt?: string;
+  remainingWork: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -55,16 +57,24 @@ export interface Schedule {
 export interface Evidence {
   id: string;
   taskId?: string;
+  projectId?: string;
+  taskTitleSnapshot?: string;
   sessionId?: string;
   type: "text" | "link" | "image" | "file";
   title: string;
   content: string;
+  url?: string;
+  fileId?: string;
+  fileName?: string;
+  mimeType?: string;
+  fileSize?: number;
   createdAt: string;
 }
 
 export interface FocusSession {
   id: string;
-  taskId: string;
+  taskId?: string;
+  taskTitleSnapshot?: string;
   startedAt: string;
   endedAt?: string;
   pausedAt?: string;
@@ -73,6 +83,37 @@ export interface FocusSession {
   completion?: "done" | "partial" | "todo";
   outcome?: string;
   distraction?: string;
+}
+
+export type CourseFocusLevel = "must" | "light" | "flexible";
+
+export interface Course {
+  id: string;
+  title: string;
+  weekdays: number[];
+  startTime: string;
+  endTime: string;
+  location: string;
+  teacher?: string;
+  weeks: number[];
+  focusLevel: CourseFocusLevel;
+  note?: string;
+  createdAt: string;
+}
+
+export interface CourseChange {
+  id: string;
+  courseId?: string;
+  type: "cancelled" | "rescheduled" | "activity";
+  title: string;
+  originalDate?: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  location?: string;
+  focusLevel: CourseFocusLevel;
+  note?: string;
+  createdAt: string;
 }
 
 export type InboxCategory =
@@ -89,6 +130,7 @@ export interface InboxItem {
   category: InboxCategory;
   archived: boolean;
   convertedTo?: string;
+  convertedToId?: string;
 }
 
 export interface KnowledgeItem {
@@ -109,12 +151,18 @@ export interface Review {
   id: string;
   type: "daily" | "weekly" | "monthly";
   periodLabel: string;
+  periodStart?: string;
+  periodEnd?: string;
   completed: number;
   plannedMinutes: number;
   actualMinutes: number;
   highlights: string;
   blockers: string;
   nextAction: string;
+  taskIds?: string[];
+  projectIds?: string[];
+  focusSessionIds?: string[];
+  evidenceIds?: string[];
   createdAt: string;
 }
 
@@ -154,6 +202,11 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   simulated?: boolean;
+  proposedActions?: {
+    type: "create_task";
+    title: string;
+    estimate: number;
+  }[];
   createdAt: string;
 }
 
@@ -177,6 +230,12 @@ export interface AIActionLog {
 export interface AppSettings {
   name: string;
   compactMode: boolean;
+  semesterStart: string;
+  totalWeeks: number;
+  dayStart: string;
+  dayEnd: string;
+  aiEndpoint: string;
+  aiConsent: boolean;
 }
 
 export interface AppData {
@@ -185,6 +244,8 @@ export interface AppData {
   projects: Project[];
   tasks: Task[];
   schedules: Schedule[];
+  courses: Course[];
+  courseChanges: CourseChange[];
   focusSessions: FocusSession[];
   evidence: Evidence[];
   inbox: InboxItem[];
@@ -200,6 +261,8 @@ export interface AppData {
 
 export type PageId =
   | "dashboard"
+  | "planning"
+  | "library"
   | "schedule"
   | "goals"
   | "inbox"

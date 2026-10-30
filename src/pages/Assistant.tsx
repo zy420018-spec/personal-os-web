@@ -4,6 +4,7 @@ import {
   BrainCircuit,
   CalendarDays,
   Check,
+  CircleAlert,
   FileSearch,
   FolderKanban,
   History,
@@ -13,6 +14,8 @@ import {
   ShieldCheck,
   Sparkles,
   Target,
+  Wifi,
+  WifiOff,
   WandSparkles,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -22,7 +25,12 @@ import type {
   TaskStatus,
 } from "../types";
 import { useStore } from "../store";
-import { durationLabel, formatDateTime, todayKey } from "../date";
+import { formatDateTime, todayKey } from "../date";
+import {
+  buildAIContext,
+  requestAI,
+  type AIProposedAction,
+} from "../ai";
 import {
   Button,
   IconButton,
@@ -97,6 +105,8 @@ export function AssistantPage() {
   );
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
+  const [error, setError] = useState("");
+  const [lastFailedPrompt, setLastFailedPrompt] = useState("");
   const [actionOpen, setActionOpen] = useState(false);
   const [actionTitle, setActionTitle] = useState("");
   const [actionEstimate, setActionEstimate] = useState(30);
@@ -126,81 +136,18 @@ export function AssistantPage() {
       mode,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      messages: [
-        {
-          id: `message-${Date.now()}`,
-          role: "assistant",
-          content:
-            "这是模拟 AI 协作界面。我已经载入当前工作台上下文，可以一起规划、分析或复盘。所有内容均为本地规则生成。",
-          simulated: true,
-          createdAt: new Date().toISOString(),
-        },
-      ],
+      messages: [],
     };
     createConversation(conversation);
     setActiveId(conversation.id);
   };
 
-  const createReply = (prompt: string): string => {
-    const openTasks = data.tasks
-      .filter((task) => !["done", "abandoned"].includes(task.status))
-      .sort((a, b) => {
-        const rank = { urgent: 0, high: 1, medium: 2, low: 3 };
-        return rank[a.priority] - rank[b.priority];
-      });
-    const todaySchedules = data.schedules.filter(
-      (schedule) => schedule.date === todayKey(),
-    );
-    const unfinishedProjects = data.projects.filter((project) => {
-      const tasks = data.tasks.filter(
-        (task) => task.projectId === project.id,
-      );
-      return tasks.some((task) => task.status !== "done");
-    });
-    if (prompt.includes("规划今天") || prompt.includes("今天的重点")) {
-      return `我建议今天只确定一个主要结果：\n\n1. 先推进“${openTasks[0]?.title || "当前最重要的任务"}”。它优先级高，预计 ${openTasks[0]?.estimate || 30} 分钟。\n2. 今天的日程目前有 ${todaySchedules.length} 个时间块，建议给每个时间块后留 10 分钟缓冲。\n3. 如果上午精力更好，可以把最难的部分放在第一个完整时间块。\n\n需要我基于这个建议创建一个具体任务吗？`;
-    }
-    if (prompt.includes("分析项目") || prompt.includes("项目")) {
-      const project = unfinishedProjects[0];
-      const tasks = data.tasks.filter(
-        (task) => task.projectId === project?.id,
-      );
-      const done = tasks.filter((task) => task.status === "done").length;
-      return `当前最值得关注的是“${project?.title || "暂无开放项目"}”。\n\n它有 ${tasks.length} 项任务，已完成 ${done} 项。下一步建议检查：“${tasks.find((task) => task.status !== "done")?.title || "为项目增加一个最小行动"}”。\n\n风险在于：${
-        project?.risks || "项目还没有记录明确风险，可能导致范围持续扩大。"
-      }\n\n先把下一步缩小到 30 分钟能开始的动作。`;
-    }
-    if (prompt.includes("收集箱") || prompt.includes("想法")) {
-      const pending = data.inbox.filter((item) => !item.archived);
-      return `收集箱里还有 ${pending.length} 条待整理内容。\n\n${pending
-        .slice(0, 3)
-        .map((item, index) => `${index + 1}. ${item.content.slice(0, 45)}`)
-        .join("\n")}\n\n建议先处理最接近行动的一项。分类与转换都由你确认后才执行。`;
-    }
-    if (prompt.includes("复盘") || prompt.includes("执行数据")) {
-      const completed = data.tasks.filter(
-        (task) => task.status === "done",
-      ).length;
-      const focusMinutes = data.focusSessions.reduce((sum, item) => {
-        if (!item.endedAt) return sum;
-        return (
-          sum +
-          Math.max(
-            0,
-            (new Date(item.endedAt).getTime() -
-              new Date(item.startedAt).getTime() -
-              item.totalPausedMs) /
-              60000,
-          )
-        );
-      }, 0);
-      return `我从工作台里读到 ${completed} 项已完成任务和 ${durationLabel(Math.round(focusMinutes))} 的专注记录。\n\n可以围绕三个问题快速复盘：今天最重要的结果是什么？什么造成了计划偏差？明天要保留或停止什么？\n\n目前最明显的风险是任务完成状态与专注成果需要继续补充，否则后续复盘只能看到数量，看不到质量。`;
-    }
-    return `我先基于工作台当前数据给你一个简要判断：\n\n• ${openTasks.length} 项任务仍未完成\n• ${unfinishedProjects.length} 个项目在推进\n• ${data.inbox.filter((item) => !item.archived).length} 条想法待整理\n\n如果你愿意，我建议先确定今天唯一必须完成的结果，再决定时间安排。你也可以告诉我更具体的卡点。`;
-  };
-
-  const send = (text = input) => {
+  const send = async (text = input) => {
     if (!text.trim() || !active) return;
+    if (!data.settings.aiEndpoint.trim()) {
+      setError("真实 AI 尚未配置。请先在个人设置中填写安全的服务端代理地址。");
+      return;
+    }
     const prompt = text.trim();
     const userMessage: ChatMessage = {
       id: `message-${Date.now()}`,
@@ -221,12 +168,21 @@ export function AssistantPage() {
     saveConversation(nextConversation);
     setInput("");
     setThinking(true);
-    window.setTimeout(() => {
+    setError("");
+    setLastFailedPrompt("");
+    try {
+      const result = await requestAI({
+        endpoint: data.settings.aiEndpoint.trim(),
+        message: prompt,
+        mode,
+        history: nextConversation.messages,
+        context: data.settings.aiConsent ? buildAIContext(data) : null,
+      });
       const assistantMessage: ChatMessage = {
         id: `message-${Date.now()}-assistant`,
         role: "assistant",
-        content: createReply(prompt),
-        simulated: true,
+        content: result.reply,
+        proposedActions: result.actions,
         createdAt: new Date().toISOString(),
       };
       saveConversation({
@@ -234,18 +190,27 @@ export function AssistantPage() {
         messages: [...nextConversation.messages, assistantMessage],
         updatedAt: new Date().toISOString(),
       });
+      setLastFailedPrompt("");
+    } catch (requestError) {
+      setLastFailedPrompt(prompt);
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "AI 请求失败，请稍后重试。",
+      );
+    } finally {
       setThinking(false);
-    }, 700);
+    }
   };
 
-  const openTaskAction = () => {
-    const title =
+  const openTaskAction = (proposed?: AIProposedAction) => {
+    const title = proposed?.title ||
       lastUserMessage?.content
         .replace(/帮我|请|根据|一下|建议|今天|安排/g, "")
         .trim()
         .slice(0, 42) || "整理今天的下一步行动";
     setActionTitle(title);
-    setActionEstimate(30);
+    setActionEstimate(proposed?.estimate || 30);
     setActionOpen(true);
   };
 
@@ -255,7 +220,20 @@ export function AssistantPage() {
         eyebrow="智能协作"
         title="AI 助理"
         description="读取当前工作台上下文，陪你分析和决定下一步。"
-        actions={<SimulatedTag label="模拟 AI · 本地规则" />}
+        actions={
+          <span
+            className={`ai-connection ${data.settings.aiEndpoint ? "connected" : ""}`}
+          >
+            {data.settings.aiEndpoint ? (
+              <Wifi size={14} />
+            ) : (
+              <WifiOff size={14} />
+            )}
+            {data.settings.aiEndpoint
+              ? "真实 AI 服务已配置"
+              : "真实 AI 尚未配置"}
+          </span>
+        }
       />
 
       <div className="assistant-layout">
@@ -330,8 +308,32 @@ export function AssistantPage() {
                 <em>{data.tasks.filter((task) => task.status !== "done").length} 个开放任务</em>
                 <em>{data.projects.length} 个项目</em>
                 <em>{data.knowledge.length} 条知识</em>
+                <em>
+                  {data.settings.aiConsent ? "已授权上下文" : "未授权上下文"}
+                </em>
               </div>
             </div>
+            {!data.settings.aiEndpoint ? (
+              <div className="ai-config-notice">
+                <WifiOff size={18} />
+                <div>
+                  <strong>不会用固定回复冒充 AI</strong>
+                  <p>
+                    请先在个人设置中填写服务端 AI 代理地址，并在部署环境配置密钥。
+                    GitHub Pages 只托管静态前端，不能安全保存 API Key。
+                  </p>
+                </div>
+              </div>
+            ) : null}
+            {error ? (
+              <div className="ai-error-banner">
+                <CircleAlert size={16} />
+                <span>{error}</span>
+                {lastFailedPrompt ? (
+                  <button onClick={() => send(lastFailedPrompt)}>重试</button>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="message-list">
               {active?.messages.map((message) => (
@@ -352,6 +354,19 @@ export function AssistantPage() {
                     {message.content.split("\n").map((line, index) => (
                       <p key={index}>{line || "\u00a0"}</p>
                     ))}
+                    {message.proposedActions?.length ? (
+                      <div className="ai-proposed-actions">
+                        {message.proposedActions.map((proposed, index) => (
+                          <button
+                            key={`${proposed.title}-${index}`}
+                            onClick={() => openTaskAction(proposed)}
+                          >
+                            <ListTodo size={14} />
+                            建议：{proposed.title}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ))}
@@ -371,18 +386,19 @@ export function AssistantPage() {
 
             {lastAssistant && !thinking ? (
               <div className="suggested-actions">
-                <span>基于这条回复</span>
-                <button onClick={openTaskAction}>
-                  <ListTodo size={14} /> 创建任务
-                </button>
+                <span>继续追问</span>
                 <button
                   onClick={() =>
                     send("请给出一个更小、可以在 15 分钟内开始的行动。")
                   }
+                  disabled={!data.settings.aiEndpoint}
                 >
                   <WandSparkles size={14} /> 进一步拆解
                 </button>
-                <button onClick={() => send("这个判断有哪些风险？")}>
+                <button
+                  onClick={() => send("这个判断有哪些风险？")}
+                  disabled={!data.settings.aiEndpoint}
+                >
                   <FileSearch size={14} /> 检查风险
                 </button>
               </div>
@@ -397,6 +413,7 @@ export function AssistantPage() {
                   <button
                     key={action.label}
                     onClick={() => send(action.prompt)}
+                    disabled={thinking || !data.settings.aiEndpoint}
                   >
                     <Icon size={14} />
                     {action.label}
@@ -419,13 +436,17 @@ export function AssistantPage() {
               />
               <button
                 aria-label="发送消息"
-                disabled={!input.trim() || thinking}
+                disabled={!input.trim() || thinking || !data.settings.aiEndpoint}
                 onClick={() => send()}
               >
                 <ArrowUp size={18} />
               </button>
             </div>
-            <p>模拟回复：内容由本地规则生成，不会调用外部模型。</p>
+            <p>
+              {data.settings.aiEndpoint
+                ? "回复来自已配置的服务端 AI；操作建议仍需你确认。"
+                : "配置真实 AI 服务前，发送功能保持停用。"}
+            </p>
           </div>
         </section>
 
@@ -485,7 +506,8 @@ export function AssistantPage() {
           <section className="context-note">
             <Bot size={17} />
             <p>
-              默认使用协作模式。AI 可以读取本地工作台数据，但不会直接修改正式计划。
+              只有开启上下文授权后，工作台数据才会发送给已配置的 AI 服务。
+              重要修改不会自动执行。
             </p>
           </section>
         </aside>
@@ -494,7 +516,7 @@ export function AssistantPage() {
       <Modal
         open={actionOpen}
         title="确认创建任务"
-        description="这是由模拟 AI 提出的操作，确认后才会写入工作台。"
+        description="这是 AI 提出的操作建议，确认后才会写入工作台。"
         onClose={() => setActionOpen(false)}
         footer={
           <>
@@ -511,6 +533,7 @@ export function AssistantPage() {
                   priority: "medium",
                   deadline: todayKey(),
                   estimate: actionEstimate,
+                  remainingWork: "",
                 });
                 addAILog({
                   action: "创建任务",

@@ -1,7 +1,15 @@
 node_modules/
 dist/
+.env
+.env.local
+.vercel/
 work/screens/
 work/*.log
+work/api-payloads/
+work/push-via-api.ps1
+work/update-ref.json
+test-results/
+playwright-report/
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts

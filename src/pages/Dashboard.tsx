@@ -29,6 +29,8 @@ import {
   StatusBadge,
 } from "../components/ui";
 import { TaskEditor } from "../components/TaskEditor";
+import { HomeFocusPanel } from "../components/HomeFocusPanel";
+import { occurrencesForDate } from "../course";
 
 export function DashboardPage({
   onNavigate,
@@ -43,8 +45,11 @@ export function DashboardPage({
   const todaySchedules = data.schedules
     .filter((item) => item.date === todayKey())
     .sort((a, b) => a.start.localeCompare(b.start));
-  const todayTaskIds = new Set(
-    todaySchedules.map((item) => item.taskId).filter(Boolean),
+  const todayCourses = occurrencesForDate(
+    todayKey(),
+    data.courses,
+    data.courseChanges,
+    data.settings,
   );
   const openTasks = data.tasks
     .filter((task) => !["done", "abandoned"].includes(task.status))
@@ -56,18 +61,30 @@ export function DashboardPage({
       return priority[a.priority] - priority[b.priority];
     });
   const visibleTasks = expanded ? openTasks : openTasks.slice(0, 4);
+  const todayRelevantIds = new Set([
+    ...todaySchedules.map((item) => item.taskId).filter(Boolean),
+    ...data.tasks
+      .filter((task) => isToday(task.deadline))
+      .map((task) => task.id),
+    ...data.tasks
+      .filter((task) => isToday(task.completedAt))
+      .map((task) => task.id),
+    ...data.focusSessions
+      .filter((session) => isToday(session.startedAt) && session.taskId)
+      .map((session) => session.taskId),
+  ]);
   const todayCompleted = data.tasks.filter(
-    (task) => task.status === "done" && isToday(task.deadline),
+    (task) =>
+      todayRelevantIds.has(task.id) &&
+      task.status === "done" &&
+      (isToday(task.completedAt) || isToday(task.deadline)),
   ).length;
-  const todayTotal = Math.max(
-    todaySchedules.length,
-    todaySchedules.length + openTasks.filter((task) => isToday(task.deadline)).length,
-  );
+  const todayTotal = todayRelevantIds.size;
   const todayPercent = todayTotal
     ? Math.round((todayCompleted / todayTotal) * 100)
     : 0;
   const weekDone = data.tasks.filter(
-    (task) => task.status === "done" && isThisWeek(task.deadline),
+    (task) => task.status === "done" && isThisWeek(task.completedAt),
   ).length;
   const weekOpen = data.tasks.filter(
     (task) =>
@@ -123,7 +140,7 @@ export function DashboardPage({
             <Button
               variant="secondary"
               icon={CalendarClock}
-              onClick={() => onNavigate("schedule")}
+              onClick={() => onNavigate("planning")}
             >
               查看日程
             </Button>
@@ -138,6 +155,14 @@ export function DashboardPage({
             </Button>
           </>
         }
+      />
+
+      <HomeFocusPanel
+        onOpenTask={(task) => {
+          setSelectedTask(task);
+          setTaskEditorOpen(true);
+        }}
+        onOpenPlanning={() => onNavigate("planning")}
       />
 
       <div className="dashboard-grid">
@@ -223,14 +248,36 @@ export function DashboardPage({
             </div>
             <button
               className="text-action"
-              onClick={() => onNavigate("schedule")}
+              onClick={() => onNavigate("planning")}
             >
               打开日程 <ArrowRight size={14} />
             </button>
           </div>
           <div className="timeline">
-            {todaySchedules.length ? (
-              todaySchedules.map((schedule) => {
+            {todaySchedules.length || todayCourses.length ? (
+              <>
+                {todayCourses.map((course) => (
+                  <div className="timeline-row course-row" key={course.id}>
+                    <span className="timeline-time">
+                      <strong>{course.startTime}</strong>
+                      <small>{course.endTime}</small>
+                    </span>
+                    <span className="timeline-dot course" />
+                    <span className="timeline-content">
+                      <strong>{course.title}</strong>
+                      <small>
+                        {course.location || "课程"} ·{" "}
+                        {course.focusLevel === "must"
+                          ? "必须专心"
+                          : course.focusLevel === "light"
+                            ? "轻度空闲"
+                            : "相对空闲"}
+                      </small>
+                    </span>
+                    <span className="course-timeline-label">课程</span>
+                  </div>
+                ))}
+                {todaySchedules.map((schedule) => {
                 const task = data.tasks.find(
                   (item) => item.id === schedule.taskId,
                 );
@@ -243,7 +290,7 @@ export function DashboardPage({
                         setSelectedTask(task);
                         setTaskEditorOpen(true);
                       } else {
-                        onNavigate("schedule");
+                        onNavigate("planning");
                       }
                     }}
                   >
@@ -263,7 +310,8 @@ export function DashboardPage({
                     {task ? <StatusBadge status={task.status} /> : null}
                   </button>
                 );
-              })
+              })}
+              </>
             ) : (
               <div className="timeline-empty">
                 <CalendarClock size={22} />
@@ -271,7 +319,7 @@ export function DashboardPage({
                 <Button
                   size="sm"
                   variant="secondary"
-                  onClick={() => onNavigate("schedule")}
+                  onClick={() => onNavigate("planning")}
                 >
                   安排日程
                 </Button>
@@ -363,7 +411,7 @@ export function DashboardPage({
           <ProgressBar value={weekPercent} color="orange" />
           <div className="week-footer">
             <span>计划 {todaySchedules.length} 个时间块</span>
-            <SimulatedTag label="AI 建议" />
+            <SimulatedTag label="本地观察" />
           </div>
         </section>
       </div>

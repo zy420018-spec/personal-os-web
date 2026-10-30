@@ -28,6 +28,7 @@ import {
   Tabs,
   useToast,
 } from "../components/ui";
+import { requestAI } from "../ai";
 
 type FilterMode = "all" | "pending" | "archived";
 
@@ -53,8 +54,10 @@ const localClassify = (content: string): InboxCategory => {
 
 export function InboxPage({
   onNavigate,
+  embedded = false,
 }: {
   onNavigate: (page: PageId) => void;
+  embedded?: boolean;
 }) {
   const {
     data,
@@ -82,6 +85,10 @@ export function InboxPage({
   const [estimate, setEstimate] = useState(30);
   const [deleteItem, setDeleteItem] = useState<InboxItem | undefined>();
   const [formError, setFormError] = useState("");
+  const [aiItem, setAiItem] = useState<InboxItem | undefined>();
+  const [aiResult, setAiResult] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiCategory, setAiCategory] = useState<InboxCategory | undefined>();
 
   const filteredItems = useMemo(() => {
     return data.inbox.filter((item) => {
@@ -115,43 +122,91 @@ export function InboxPage({
     setFormError("");
   };
 
+  const organizeWithAI = async (item: InboxItem) => {
+    if (!data.settings.aiEndpoint.trim() || !data.settings.aiConsent) {
+      toast("请先在个人设置中连接真实 AI，并授权工作台上下文");
+      return;
+    }
+    setAiItem(item);
+    setAiResult("");
+    setAiCategory(undefined);
+    setAiLoading(true);
+    try {
+      const result = await requestAI({
+        endpoint: data.settings.aiEndpoint.trim(),
+        message:
+          "请整理这条收集内容：识别类型、关键词、核心摘要、相似内容、推荐关联项目，并判断是否值得推进。最后用一行给出 [[CATEGORY:idea|task|project|goal|knowledge]]。",
+        mode: "advisory",
+        history: [],
+        context: {
+          item,
+          goals: data.goals,
+          projects: data.projects,
+          tasks: data.tasks.slice(0, 80),
+          knowledge: data.knowledge.slice(0, 80),
+        },
+      });
+      const match = result.reply.match(
+        /\[\[CATEGORY:(idea|task|project|goal|knowledge)\]\]/i,
+      );
+      const category = match?.[1] as InboxCategory | undefined;
+      setAiCategory(category);
+      setAiResult(
+        result.reply.replace(/\[\[CATEGORY:.*?\]\]/gi, "").trim(),
+      );
+    } catch (analysisError) {
+      setAiResult(
+        analysisError instanceof Error
+          ? `AI 整理失败：${analysisError.message}`
+          : "AI 整理失败，请稍后重试。",
+      );
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const convert = () => {
     if (!convertItem || !conversionTitle.trim()) {
       setFormError("请填写标题。");
       return;
     }
     const title = conversionTitle.trim();
+    let convertedToId = "";
     if (conversionType === "task") {
-      createTask({
+      const created = createTask({
         title,
         description: conversionDetail.trim(),
         status: "todo",
         priority: "medium",
         deadline,
         estimate,
+        remainingWork: "",
       });
+      convertedToId = created.id;
       toast("已转换为任务，原想法仍保留在收集箱");
     }
     if (conversionType === "project") {
-      createProject({
+      const created = createProject({
         title,
         outcome: conversionDetail.trim() || title,
         deadline,
         mode: "simple",
       });
+      convertedToId = created.id;
       toast("已转换为项目，原想法仍保留在收集箱");
     }
     if (conversionType === "goal") {
-      createGoal({
+      const created = createGoal({
         title,
         outcome: conversionDetail.trim() || title,
         description: conversionDetail.trim(),
         deadline,
       });
+      convertedToId = created.id;
       toast("已转换为目标，原想法仍保留在收集箱");
     }
     if (conversionType === "knowledge") {
-      createKnowledge({
+      const created = createKnowledge({
         title,
         summary: conversionDetail.trim().slice(0, 90),
         content: conversionDetail.trim(),
@@ -160,23 +215,27 @@ export function InboxPage({
         type: "note",
         tags: ["收集箱"],
       });
+      convertedToId = created.id;
       toast("已整理为知识资料，原想法仍保留在收集箱");
     }
     updateInboxItem({
       ...convertItem,
       archived: true,
       convertedTo: conversionType,
+      convertedToId,
     });
     setConvertItem(undefined);
   };
 
   return (
-    <div className="page inbox-page">
-      <PageHeader
-        eyebrow="快速记录"
-        title="收集箱"
-        description="记录时不必打断自己，之后再决定它要去哪里。"
-      />
+    <div className={`${embedded ? "embedded-page" : "page"} inbox-page`}>
+      {!embedded ? (
+        <PageHeader
+          eyebrow="快速记录"
+          title="收集箱"
+          description="记录时不必打断自己，之后再决定它要去哪里。"
+        />
+      ) : null}
 
       <section className="capture-panel">
         <div className="capture-icon">
@@ -295,6 +354,14 @@ export function InboxPage({
                 </div>
               ) : null}
               <div className="inbox-actions">
+                <IconButton
+                  icon={Sparkles}
+                  label="AI 整理"
+                  onClick={() => organizeWithAI(item)}
+                  disabled={
+                    !data.settings.aiEndpoint || !data.settings.aiConsent
+                  }
+                />
                 {!item.archived ? (
                   <Button
                     variant="secondary"
@@ -330,6 +397,49 @@ export function InboxPage({
           />
         ) : null}
       </section>
+
+      <Modal
+        open={Boolean(aiItem)}
+        title="AI 整理建议"
+        description="AI 只提出建议；采用分类后仍需你确认转换或归档。"
+        onClose={() => setAiItem(undefined)}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setAiItem(undefined)}>
+              关闭
+            </Button>
+            <Button
+              disabled={!aiCategory || !aiItem}
+              onClick={() => {
+                if (!aiCategory || !aiItem) return;
+                const updated = { ...aiItem, category: aiCategory };
+                updateInboxItem(updated);
+                setAiItem(undefined);
+                openConvert(updated, aiCategory);
+                toast("已采用 AI 分类建议");
+              }}
+            >
+              采用建议并整理
+            </Button>
+          </>
+        }
+      >
+        <div className="ai-organize-result">
+          {aiLoading ? (
+            <div className="ai-organize-loading">
+              <Sparkles size={18} />
+              正在读取当前信息与相关工作台数据…
+            </div>
+          ) : (
+            <p>{aiResult}</p>
+          )}
+          {aiCategory ? (
+            <span className="ai-category-suggestion">
+              建议类型：{categoryMeta[aiCategory].label}
+            </span>
+          ) : null}
+        </div>
+      </Modal>
 
       <Modal
         open={Boolean(selected)}

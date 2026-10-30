@@ -5,6 +5,7 @@ import {
   Coffee,
   FileText,
   History,
+  Paperclip,
   Pause,
   Play,
   PlayCircle,
@@ -34,6 +35,7 @@ import {
   StatusBadge,
   useToast,
 } from "../components/ui";
+import { saveEvidenceFile } from "../storage/files";
 
 export function FocusPage({
   onNavigate,
@@ -55,6 +57,9 @@ export function FocusPage({
   const [completion, setCompletion] =
     useState<"done" | "partial" | "todo">("partial");
   const [distraction, setDistraction] = useState("");
+  const [remainingWork, setRemainingWork] = useState("");
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  const [savingEnd, setSavingEnd] = useState(false);
   const [cooldownOpen, setCooldownOpen] = useState(false);
   const [cooldown, setCooldown] = useState(30);
   const [cooldownReason, setCooldownReason] = useState("");
@@ -172,17 +177,29 @@ export function FocusPage({
   const openEnd = () => {
     setOutcome("");
     setDistraction("");
+    setRemainingWork(activeTask?.remainingWork || "");
+    setEvidenceFile(null);
     setCompletion("partial");
     setError("");
     setEndOpen(true);
   };
 
-  const endSession = () => {
-    if (!activeSession || !activeTask) return;
+  const endSession = async () => {
+    if (!activeSession || !activeTask || savingEnd) return;
     if (!outcome.trim()) {
       setError("请记录这次实际完成了什么。");
       return;
     }
+    if (completion === "partial" && !remainingWork.trim()) {
+      setError("部分完成时需要记录剩余工作。");
+      return;
+    }
+    if (evidenceFile && evidenceFile.size > 25 * 1024 * 1024) {
+      setError("单个成果文件不能超过 25 MB。");
+      return;
+    }
+    setSavingEnd(true);
+    setError("");
     const endedAt = new Date().toISOString();
     const totalPausedMs =
       activeSession.totalPausedMs +
@@ -190,25 +207,60 @@ export function FocusPage({
         ? new Date(endedAt).getTime() -
           new Date(activeSession.pausedAt).getTime()
         : 0);
-    saveFocusSession({
-      ...activeSession,
-      status: "ended",
-      endedAt,
-      pausedAt: undefined,
-      totalPausedMs,
-      completion,
-      outcome: outcome.trim(),
-      distraction: distraction.trim(),
-    });
-    createEvidence({
-      taskId: activeTask.id,
-      sessionId: activeSession.id,
-      type: "text",
-      title: `${activeTask.title} · 执行成果`,
-      content: outcome.trim(),
-    });
+    let fileInfo:
+      | {
+          fileId: string;
+          fileName: string;
+          mimeType: string;
+          fileSize: number;
+        }
+      | undefined;
+    try {
+      if (evidenceFile) {
+        fileInfo = await saveEvidenceFile(evidenceFile);
+      }
+      saveFocusSession({
+        ...activeSession,
+        status: "ended",
+        endedAt,
+        pausedAt: undefined,
+        totalPausedMs,
+        completion,
+        outcome: outcome.trim(),
+        distraction: distraction.trim(),
+      });
+      createEvidence({
+        taskId: activeTask.id,
+        projectId: activeTask.projectId,
+        sessionId: activeSession.id,
+        type: "text",
+        title: `${activeTask.title} · 执行成果`,
+        content: outcome.trim(),
+      });
+      if (evidenceFile && fileInfo) {
+        createEvidence({
+          taskId: activeTask.id,
+          projectId: activeTask.projectId,
+          sessionId: activeSession.id,
+          type: evidenceFile.type.startsWith("image/") ? "image" : "file",
+          title: evidenceFile.name,
+          content: "专注结束时提交的成果材料。",
+          ...fileInfo,
+        });
+      }
+    } catch (saveError) {
+      setSavingEnd(false);
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "成果文件保存失败，请重试。",
+      );
+      return;
+    }
     updateTask({
       ...activeTask,
+      remainingWork:
+        completion === "partial" ? remainingWork.trim() : "",
       status:
         completion === "done"
           ? "done"
@@ -217,6 +269,7 @@ export function FocusPage({
             : "doing",
     });
     setEndOpen(false);
+    setSavingEnd(false);
     toast("执行记录和成果已保存，任务状态已同步");
   };
 
@@ -514,6 +567,7 @@ export function FocusPage({
                       priority: "medium",
                       deadline: todayKey(),
                       estimate: 30,
+                      remainingWork: "",
                     });
                     setSelectionOpen(false);
                     startFocus(task.id);
@@ -549,8 +603,12 @@ export function FocusPage({
             <Button variant="secondary" onClick={() => setEndOpen(false)}>
               继续专注
             </Button>
-            <Button icon={Check} onClick={endSession}>
-              保存并结束
+            <Button
+              icon={Check}
+              onClick={endSession}
+              disabled={savingEnd}
+            >
+              {savingEnd ? "保存中…" : "保存并结束"}
             </Button>
           </>
         }
@@ -598,6 +656,31 @@ export function FocusPage({
               onChange={(event) => setDistraction(event.target.value)}
               placeholder="例如：临时消息打断了两次"
             />
+          </Field>
+          {completion === "partial" ? (
+            <Field label="剩余工作" required className="span-2">
+              <textarea
+                rows={2}
+                value={remainingWork}
+                onChange={(event) => setRemainingWork(event.target.value)}
+                placeholder="下一次继续时需要完成什么？"
+              />
+            </Field>
+          ) : null}
+          <Field label="附加图片或文件" hint="可选，最大 25 MB" className="span-2">
+            <label className="file-drop-zone compact">
+              <input
+                type="file"
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
+                onChange={(event) =>
+                  setEvidenceFile(event.target.files?.[0] || null)
+                }
+              />
+              <Paperclip size={17} />
+              <strong>
+                {evidenceFile ? evidenceFile.name : "选择成果文件"}
+              </strong>
+            </label>
           </Field>
           <div className="evidence-requirement span-2">
             <FileText size={16} />
