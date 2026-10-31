@@ -1,0 +1,59 @@
+{
+  "name": "PersonalOS",
+  "short_name": "PersonalOS",
+  "description": "将想法变成行动的个人工作台",
+  "id": "./",
+  "start_url": "./#/dashboard",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "any",
+  "background_color": "#f3f1eb",
+  "theme_color": "#19241f",
+  "lang": "zh-CN",
+  "categories": ["productivity", "education"],
+  "icons": [
+    {
+      "src": "./icons/personal-os-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/personal-os-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/personal-os-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "打开今日工作台",
+      "short_name": "今日",
+      "url": "./#/dashboard",
+      "icons": [
+        {
+          "src": "./icons/personal-os-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "打开规划",
+      "short_name": "规划",
+      "url": "./#/planning",
+      "icons": [
+        {
+          "src": "./icons/personal-os-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}
