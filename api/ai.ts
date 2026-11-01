@@ -50,22 +50,6 @@ const parseBody = (body: unknown): AIRequest => {
   return {};
 };
 
-const extractOutputText = (payload: unknown) => {
-  const response = payload as {
-    output_text?: string;
-    output?: {
-      content?: { type?: string; text?: string }[];
-    }[];
-  };
-  if (response.output_text) return response.output_text;
-  return (response.output || [])
-    .flatMap((item) => item.content || [])
-    .filter((item) => item.type === "output_text" || item.text)
-    .map((item) => item.text || "")
-    .join("\n")
-    .trim();
-};
-
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   const configuredOrigins = (runtimeEnvironment.ALLOWED_ORIGINS || "")
     .split(",")
@@ -125,6 +109,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     res.status(413).json({ error: "消息过长，请缩短后重试。" });
     return;
   }
+
   const contextText = body.context
     ? JSON.stringify(body.context).slice(0, 120000)
     : "用户未授权发送工作台数据上下文。";
@@ -133,12 +118,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     .map((item) => `${item.role === "user" ? "用户" : "助手"}：${item.content}`)
     .join("\n");
   const mode = body.mode || "collaborative";
-  const model = runtimeEnvironment.OPENAI_MODEL || "gpt-4.1-mini";
+  const model = runtimeEnvironment.OPENAI_MODEL || "Qwen/Qwen3-8B";
+  const baseUrl = runtimeEnvironment.OPENAI_BASE_URL || "https://api.siliconflow.cn/v1";
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 45000);
 
   try {
-    const response = await fetch("https://api.openai.com/v1/responses", {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -146,12 +133,22 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       },
       body: JSON.stringify({
         model,
-        instructions: `${modeInstructions[mode]}\n\n${outputInstructions}`,
-        input: `工作台数据快照：\n${contextText}\n\n最近对话：\n${history || "无"}\n\n用户当前消息：\n${message}`,
-        max_output_tokens: 1400,
+        messages: [
+          {
+            role: "system",
+            content: `${modeInstructions[mode]}\n\n${outputInstructions}`,
+          },
+          {
+            role: "user",
+            content: `工作台数据快照：\n${contextText}\n\n最近对话：\n${history || "无"}\n\n用户当前消息：\n${message}`,
+          },
+        ],
+        max_tokens: 1400,
+        temperature: 0.7,
       }),
       signal: controller.signal,
     });
+
     const payload = await response.json();
     if (!response.ok) {
       const apiMessage =
@@ -163,7 +160,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       });
       return;
     }
-    const reply = extractOutputText(payload);
+
+    const reply =
+      (payload as { choices?: { message?: { content?: string } }[] })
+        .choices?.[0]?.message?.content?.trim() || "";
+
     if (!reply) {
       res.status(502).json({
         error: "模型返回了空内容，请重试。",
@@ -173,8 +174,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
     res.status(200).json({ reply, model });
   } catch (error) {
-    const aborted =
-      error instanceof Error && error.name === "AbortError";
+    const aborted = error instanceof Error && error.name === "AbortError";
     res.status(aborted ? 504 : 502).json({
       error: aborted
         ? "模型响应超时，请重试。"
